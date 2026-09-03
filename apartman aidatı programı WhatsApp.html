@@ -1,0 +1,1288 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Apartman Aidat Yönetimi</title>
+<style>
+  :root{
+    --red:#e53935;
+    --red-dark:#c62828;
+    --bg:#f2f3f7;
+    --card:#ffffff;
+    --green:#2e7d32;
+    --green-bg:#e3f3e4;
+    --red-bg:#fdeaea;
+    --blue-bg:#dbe7fb;
+    --blue:#2451c9;
+    --text:#1b1c20;
+    --muted:#7a7d87;
+    --radius:16px;
+    --whatsapp:#25D366;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    display:flex;
+    justify-content:center;
+  }
+  #app{
+    width:100%;
+    max-width:460px;
+    min-height:100vh;
+    background:var(--bg);
+    display:flex;
+    flex-direction:column;
+    position:relative;
+  }
+  header{
+    background:linear-gradient(180deg,var(--red),var(--red-dark));
+    color:#fff;
+    padding:18px 16px 20px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    position:sticky;
+    top:0;
+    z-index:5;
+  }
+  header .title{font-size:20px;font-weight:800;letter-spacing:.2px;flex:1;}
+  header button.icon-btn{
+    background:rgba(255,255,255,.18);
+    border:none;color:#fff;border-radius:10px;
+    width:38px;height:38px;font-size:18px;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;
+  }
+  header .pdf-btn{
+    display:flex;flex-direction:column;align-items:center;gap:2px;
+    background:none;border:none;color:#fff;font-size:11px;font-weight:600;flex-shrink:0;
+  }
+  header .pdf-btn span.ico{font-size:20px;}
+  main{
+    flex:1;
+    padding:16px 16px 90px;
+    overflow-y:auto;
+  }
+  .month-switch{
+    background:var(--card);
+    border-radius:var(--radius);
+    padding:14px 10px;
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .month-switch button{
+    background:none;border:none;font-size:20px;color:var(--text);
+    width:36px;height:36px;border-radius:50%;
+  }
+  .month-switch button:active{background:#eee;}
+  .month-switch .label{font-size:20px;font-weight:800;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}
+  .stat-card{
+    background:var(--card);border-radius:var(--radius);
+    padding:18px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+  }
+  .stat-card .lbl{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px;}
+  .stat-card .val{font-size:22px;font-weight:800;}
+  .val.orange{color:#f5a623;}
+  .val.green{color:var(--green);}
+  .val.red{color:var(--red);}
+  .list-card{
+    background:var(--card);border-radius:var(--radius);
+    padding:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);
+    margin-bottom:12px;
+  }
+  .row-between{display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .item-name{font-size:17px;font-weight:700;}
+  .item-date{font-size:13px;color:var(--muted);margin-top:2px;}
+  .item-amount{font-size:19px;font-weight:800;}
+  .pill{
+    display:inline-block;margin-top:8px;padding:6px 14px;border-radius:20px;
+    font-size:13px;font-weight:700;cursor:pointer;border:none;
+  }
+  .pill.paid{background:var(--green-bg);color:var(--green);}
+  .pill.unpaid{background:var(--red-bg);color:var(--red);}
+  .edit-btn{background:none;border:none;font-size:18px;color:var(--muted);padding:4px;flex-shrink:0;}
+  .whatsapp-btn{
+    background:var(--whatsapp);
+    border:none;
+    border-radius:50%;
+    width:32px;
+    height:32px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    color:white;
+    font-size:18px;
+    flex-shrink:0;
+    margin-left:5px;
+  }
+  .whatsapp-btn:active{transform:scale(0.95);}
+  .fab{
+    position:absolute;right:18px;bottom:96px;
+    width:56px;height:56px;border-radius:18px;
+    background:#c9d9f5;color:#2451c9;font-size:28px;font-weight:700;
+    border:none;box-shadow:0 4px 10px rgba(0,0,0,.15);
+  }
+  nav{
+    position:sticky;bottom:0;background:var(--card);
+    display:flex;justify-content:space-around;align-items:center;
+    padding:8px 4px 10px;border-top:1px solid #eaeaea;
+  }
+  nav button{
+    background:none;border:none;display:flex;flex-direction:column;align-items:center;
+    gap:3px;color:var(--muted);font-size:11px;font-weight:600;padding:6px 4px;border-radius:14px;
+  }
+  nav button.active{color:var(--red);}
+  nav button .ico{font-size:22px;display:block;}
+  h2.section-title{font-size:15px;font-weight:800;margin:18px 0 10px;color:var(--text);}
+  .home-balance{
+    background:var(--card);border-radius:var(--radius);padding:18px;
+    box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:14px;
+    display:flex;align-items:center;justify-content:space-between;
+  }
+  .home-balance .lbl{font-size:16px;font-weight:700;}
+  .home-balance .val{font-size:24px;font-weight:800;}
+  .home-balance .edit-balance-btn{
+    background:#f0f0f0;border:none;border-radius:8px;
+    width:32px;height:32px;font-size:16px;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .home-balance .edit-balance-btn:active{background:#e0e0e0;}
+  .chart-card{background:var(--card);border-radius:var(--radius);padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:14px;}
+  .chart-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .chart-total{font-size:26px;font-weight:800;}
+  .chart-badge{background:var(--green-bg);color:var(--green);font-weight:700;font-size:13px;padding:6px 12px;border-radius:20px;}
+  .bars{display:flex;align-items:flex-end;gap:8px;height:130px;}
+  .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;}
+  .bar{width:100%;border-radius:8px 8px 0 0;background:#f9c9c7;}
+  .bar.active{background:var(--red);}
+  .bar-lbl{margin-top:8px;font-size:12px;color:var(--muted);font-weight:600;}
+  .menu-card{background:var(--card);border-radius:var(--radius);box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;}
+  .menu-item{
+    display:flex;align-items:center;gap:14px;padding:16px;border-bottom:1px solid #f0f0f0;cursor:pointer;
+  }
+  .menu-item:last-child{border-bottom:none;}
+  .menu-ico{
+    width:44px;height:44px;border-radius:12px;background:var(--red-bg);color:var(--red);
+    display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;
+  }
+  .menu-txt .t{font-weight:700;font-size:16px;}
+  .menu-txt .s{font-size:13px;color:var(--muted);}
+  .chev{margin-left:auto;color:var(--muted);font-size:18px;}
+  .input-field{
+    width:100%;padding:12px 4px;border:none;border-bottom:2px solid #e6e6e6;
+    font-size:20px;font-weight:600;background:none;outline:none;color:var(--text);
+  }
+  .field-lbl{font-size:14px;color:var(--muted);margin-bottom:4px;font-weight:600;}
+  .btn-row{display:flex;gap:12px;margin-top:18px;}
+  .btn{
+    flex:1;padding:14px;border-radius:24px;border:none;font-weight:800;font-size:16px;
+  }
+  .btn-primary{background:var(--red);color:#fff;}
+  .btn-outline{background:#fdeceb;color:var(--red);}
+  .btn-primary:disabled{background:#e9c9c8;color:#fff;}
+  .confirm-box{
+    margin-top:16px;background:var(--green-bg);color:var(--green);border-radius:14px;
+    padding:16px;font-weight:700;font-size:15px;display:flex;gap:10px;align-items:flex-start;
+  }
+  .empty-state{text-align:center;padding:50px 20px;color:var(--muted);}
+  .empty-state .big{font-size:40px;margin-bottom:10px;}
+  .resident-avatar{
+    width:38px;height:38px;border-radius:50%;flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;
+  }
+  .resident-avatar.ok{background:var(--green-bg);color:var(--green);}
+  .resident-avatar.owe{background:var(--red-bg);color:var(--red);}
+  .resident-avatar.neutral{background:var(--blue-bg);color:var(--blue);}
+  .resident-row{display:flex;align-items:center;gap:14px;padding:16px;background:var(--card);border-radius:var(--radius);margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .resident-detail{
+    margin-top:10px;padding-top:10px;border-top:1px solid #f0f0f0;font-size:14px;color:var(--muted);
+    display:none;
+  }
+  .resident-detail.open{display:block;}
+  .modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.4);display:flex;align-items:flex-end;justify-content:center;z-index:50;
+  }
+  .modal-overlay.hidden{display:none;}
+  .modal-sheet{
+    background:var(--card);width:100%;max-width:460px;border-radius:22px 22px 0 0;
+    padding:22px;max-height:85vh;overflow-y:auto;
+  }
+  .modal-sheet h3{margin:0 0 16px;font-size:19px;font-weight:800;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin-bottom:6px;}
+  .field input, .field select{
+    width:100%;padding:12px 14px;border-radius:12px;border:1.5px solid #e5e5e5;font-size:16px;font-weight:600;
+    background:#fafafa;color:var(--text);
+  }
+  .field input:focus, .field select:focus{outline:none;border-color:var(--red);}
+  .toggle-row{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+  .toggle-row input{width:20px;height:20px;}
+  .toggle-row label{font-weight:700;font-size:15px;}
+  .modal-btns{display:flex;gap:10px;margin-top:6px;}
+  .link-danger{color:var(--red);background:none;border:none;font-weight:700;padding:10px;font-size:15px;}
+  .toast{
+    position:fixed;bottom:100px;left:50%;transform:translateX(-50%);
+    background:#1b1c20;color:#fff;padding:12px 20px;border-radius:14px;font-size:14px;font-weight:600;
+    z-index:99;opacity:0;transition:opacity .25s;pointer-events:none;max-width:80%;text-align:center;
+  }
+  .toast.show{opacity:1;}
+  .contact-picker-btn{
+    background:var(--whatsapp);
+    color:white;
+    border:none;
+    padding:8px 16px;
+    border-radius:20px;
+    font-weight:700;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    margin-top:8px;
+  }
+  .contact-picker-btn:active{transform:scale(0.98);}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button class="icon-btn" id="leftBtn"></button>
+    <div class="title" id="pageTitle">Apartman Aidat</div>
+    <button class="pdf-btn" id="pdfBtn"><span class="ico">📄</span>PDF'e Aktar</button>
+  </header>
+  <main id="main"></main>
+  <button class="fab" id="fab" style="display:none;">+</button>
+  <div class="toast" id="toast"></div>
+  <nav>
+    <button data-tab="home"><span class="ico"></span>Ana Sayfa</button>
+    <button data-tab="dues"><span class="ico">🧮</span>Aidat</button>
+    <button data-tab="tx"><span class="ico">📒</span>İşlemler</button>
+    <button data-tab="balances"><span class="ico">💰</span>Bakiyeler</button>
+    <button data-tab="expenses"><span class="ico">💸</span>Giderler</button>
+  </nav>
+</div>
+
+<div class="modal-overlay hidden" id="modalOverlay">
+  <div class="modal-sheet" id="modalSheet"></div>
+</div>
+
+<script>
+const STORAGE_KEY = "apt-dues-state-v2";
+
+function loadState(){
+  try{
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if(saved) return JSON.parse(saved);
+  }catch(e){}
+  return null;
+}
+
+function saveState(){
+  try{
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }catch(e){}
+}
+
+function formatPhoneForWhatsApp(phone){
+  if(!phone) return '';
+  let cleaned = phone.replace(/\D/g, '');
+  if(cleaned.startsWith('0')){
+    cleaned = '90' + cleaned.substring(1);
+  }
+  if(cleaned.startsWith('90') && cleaned.length === 12){
+    return cleaned;
+  }
+  if(cleaned.length === 10){
+    return '90' + cleaned;
+  }
+  return cleaned;
+}
+
+function openWhatsApp(phone, message = ''){
+  const formattedPhone = formatPhoneForWhatsApp(phone);
+  if(!formattedPhone){
+    showToast('Telefon numarası bulunamadı');
+    return;
+  }
+  const url = `https://wa.me/${formattedPhone}${message ? '?text=' + encodeURIComponent(message) : ''}`;
+  window.open(url, '_blank');
+}
+
+function pickContact(){
+  if('contacts' in navigator && 'select' in navigator.contacts){
+    const props = ['name', 'tel'];
+    const opts = {multiple: false};
+    navigator.contacts.select(props, opts).then(contacts => {
+      if(contacts.length > 0){
+        const contact = contacts[0];
+        const name = contact.name || '';
+        const tel = contact.tel && contact.tel.length > 0 ? contact.tel[0] : '';
+        const phoneInput = document.getElementById('rPhone');
+        if(phoneInput) phoneInput.value = tel;
+        if(tel){
+          showToast('Kişi seçildi: ' + (name || 'Bilinmeyen'));
+        }
+      }
+    }).catch(err => {
+      showToast('Rehber erişimi başarısız: ' + err.message);
+    });
+  }else{
+    showToast('Tarayıcınız rehber seçimini desteklemiyor');
+  }
+}
+
+function downloadBackupNow(){
+  const blob = new Blob([JSON.stringify(state,null,2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const dateStr = new Date().toISOString().slice(0,10).split("-").join(".");
+  a.download = "ApartmanAidat_Yedek_" + dateStr + ".json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  showToast("Yedek dosyası indirildi");
+}
+
+function restoreFromFile(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      if(!data.residents || !data.months){ throw new Error("bad file"); }
+      state = data;
+      if(!state.settings) state.settings = {autoBackup:true, backupFolderName:null, managerPaysDues:true, managerDaireId:1};
+      if(!state.recurringExpenses) state.recurringExpenses = [];
+      state.residents.forEach(r => { if(r.balanceAdjustment === undefined) r.balanceAdjustment = 0; });
+      saveState();
+      persistAndRender();
+      showToast("Yedek geri yüklendi");
+    }catch(err){
+      showToast("Geçersiz yedek dosyası");
+    }
+  };
+  reader.readAsText(file);
+}
+
+function defaultResidents(){
+  const list = [
+    {name:"Narin Mustafa İçel"},
+    {name:"Ayşe Aladağ"},
+    {name:"Ahmet Doğru"},
+    {name:"Rahime Sarman"},
+    {name:"Zübeyde Kalçık"},
+    {name:"Bekir Avrupalı"},
+    {name:"Gülşen Yılmaz"},
+    {name:"Selman"},
+    {name:"Mesut Fatiş", phone:"5434238837"},
+    {name:"Nafiz Parlak"}
+  ];
+  return list.map((r,i)=>({id:i+1, name:r.name, phone:r.phone, balanceAdjustment:0}));
+}
+
+function monthKey(y,m){ return y+"-"+String(m).padStart(2,"0"); }
+
+function defaultState(){
+  const residents = defaultResidents();
+  const months = {};
+  const seedMonths = [
+    {y:2026,m:3},{y:2026,m:4},{y:2026,m:5},{y:2026,m:6},{y:2026,m:7}
+  ];
+  seedMonths.forEach((mm,idx)=>{
+    const key = monthKey(mm.y,mm.m);
+    const amt = [4200,7200,3600,5100,6300][idx];
+    const payments = {};
+    residents.forEach(r=>{ payments[r.id] = {paid:true, date:"05."+String(mm.m).padStart(2,"0")+"."+mm.y}; });
+    months[key] = {
+      expenses:[{id:cryptoId(),name:"Genel Gider",amount:amt,paid:true,date:"25."+String(mm.m).padStart(2,"0")+"."+mm.y}],
+      duesAmount: Math.round(amt/residents.length),
+      duesApproved:true,
+      payments
+    };
+  });
+  const augKey = monthKey(2026,8);
+  months[augKey] = {
+    expenses:[
+      {id:cryptoId(),name:"Asansör Bakım",amount:1200,paid:true,date:"25.08.2026"},
+      {id:cryptoId(),name:"Temizlik",amount:2000,paid:true,date:"25.08.2026"}
+    ],
+    duesAmount:600,
+    duesApproved:true,
+    payments:{
+      1:{paid:true,date:"24.08.2026"}, 2:{paid:true,date:"24.08.2026"},
+      3:{paid:true,date:"25.08.2026"}, 4:{paid:true,date:"29.08.2026"},
+      5:{paid:true,date:"18.08.2026"}, 6:{paid:false,date:""},
+      7:{paid:true,date:"25.08.2026"}, 8:{paid:true,date:"23.08.2026"},
+      9:{paid:false,date:""}, 10:{paid:true,date:"18.08.2026"}
+    }
+  };
+  return {
+    residents,
+    months,
+    recurringExpenses:[],
+    settings:{autoBackup:true, backupFolderName:null, managerPaysDues:false, managerDaireId:9},
+    currentYear:2026,
+    currentMonth:8,
+    tab:"home"
+  };
+}
+
+function cryptoId(){ return Math.random().toString(36).slice(2,10); }
+
+let state = null;
+let openResidentId = null;
+
+const monthNamesShort = ["","Oca","Şub","Mar","Nis","May","Haz","Tem","Ağu","Eyl","Eki","Kas","Ara"];
+const monthNamesFull = ["","Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+
+function fmtTL(n){
+  const v = Math.round((n||0)*100)/100;
+  return "₺"+v.toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function getMonthRecord(y,m){
+  const key = monthKey(y,m);
+  if(!state.months[key]){
+    const newRec = {expenses:[], duesAmount:0, duesApproved:false, payments:{}};
+    state.recurringExpenses.forEach(t=>{
+      newRec.expenses.push({
+        id:cryptoId(), name:t.name, amount:t.amount, paid:false,
+        date:"01."+String(m).padStart(2,"0")+"."+y, recurringId:t.id
+      });
+    });
+    state.months[key] = newRec;
+  }
+  return state.months[key];
+}
+
+function currentRecord(){
+  return getMonthRecord(state.currentYear, state.currentMonth);
+}
+
+function shiftMonth(delta){
+  let m = state.currentMonth + delta;
+  let y = state.currentYear;
+  if(m < 1){ m = 12; y--; }
+  if(m > 12){ m = 1; y++; }
+  state.currentMonth = m; state.currentYear = y;
+  persistAndRender();
+}
+
+function monthTotalExpense(rec){
+  return rec.expenses.reduce((s,e)=>s+e.amount,0);
+}
+function monthPaidExpense(rec){
+  return rec.expenses.filter(e=>e.paid).reduce((s,e)=>s+e.amount,0);
+}
+function residentsPaidCount(rec){
+  return state.residents.filter(r=>rec.payments[r.id] && rec.payments[r.id].paid).length;
+}
+
+function allTimeTotals(){
+  let totalExpensePaid = 0, totalDuesIncome = 0;
+  Object.values(state.months).forEach(rec=>{
+    totalExpensePaid += monthPaidExpense(rec);
+    if(rec.duesApproved){
+      state.residents.forEach(r=>{
+        const isManager = !state.settings.managerPaysDues && state.settings.managerDaireId == r.id;
+        if(!isManager && rec.payments[r.id] && rec.payments[r.id].paid) {
+          totalDuesIncome += rec.duesAmount;
+        }
+      });
+    }
+  });
+  const manualAdj = (state.settings && state.settings.manualBalanceAdjustment) ? state.settings.manualBalanceAdjustment : 0;
+  return {totalExpensePaid, totalDuesIncome, manualBalanceAdjustment: manualAdj};
+}
+
+function residentBalance(residentId){
+  const isManager = state.settings && !state.settings.managerPaysDues && state.settings.managerDaireId == residentId;
+  if(isManager) return 0;
+  let owed = 0;
+  Object.values(state.months).forEach(rec=>{
+    if(rec.duesApproved && !(rec.payments[residentId] && rec.payments[residentId].paid)){
+      owed += rec.duesAmount;
+    }
+  });
+  const resident = state.residents.find(r=>r.id===residentId);
+  const adjustment = resident ? (resident.balanceAdjustment || 0) : 0;
+  return owed - adjustment;
+}
+
+function isResidentManager(residentId){
+  return !state.settings.managerPaysDues && state.settings.managerDaireId == residentId;
+}
+
+function last6MonthKeys(){
+  const arr = [];
+  let y = state.currentYear, m = state.currentMonth;
+  for(let i=5;i>=0;i--){
+    let mm = m - i, yy = y;
+    while(mm < 1){ mm += 12; yy--; }
+    arr.push({y:yy,m:mm,key:monthKey(yy,mm)});
+  }
+  return arr;
+}
+
+const main = document.getElementById("main");
+const pageTitle = document.getElementById("pageTitle");
+const fab = document.getElementById("fab");
+const pdfBtn = document.getElementById("pdfBtn");
+const leftBtn = document.getElementById("leftBtn");
+
+function persistAndRender(){
+  saveState();
+  render();
+}
+
+function render(){
+  document.querySelectorAll("nav button").forEach(b=>{
+    b.classList.toggle("active", b.dataset.tab === state.tab);
+  });
+  const fabTabs = ["expenses","tx","residents"];
+  fab.style.display = fabTabs.includes(state.tab) ? "flex" : "none";
+  const pdfTabs = ["expenses","tx","balances"];
+  pdfBtn.style.visibility = pdfTabs.includes(state.tab) ? "visible" : "hidden";
+
+  if(state.tab === "home"){
+    leftBtn.textContent = "";
+    leftBtn.onclick = null;
+  } else {
+    leftBtn.textContent = "←";
+    leftBtn.onclick = ()=>{ state.tab = "home"; persistAndRender(); };
+  }
+
+  if(state.tab==="home") return renderHome();
+  if(state.tab==="dues") return renderDues();
+  if(state.tab==="tx") return renderTx();
+  if(state.tab==="balances") return renderBalances();
+  if(state.tab==="expenses") return renderExpenses();
+  if(state.tab==="residents") return renderResidents();
+  if(state.tab==="settings") return renderSettings();
+}
+
+function monthSwitcher(){
+  return `
+  <div class="month-switch">
+    <button id="prevMonth">‹</button>
+    <div class="label">${monthNamesFull[state.currentMonth]} ${state.currentYear}</div>
+    <button id="nextMonth">›</button>
+  </div>`;
+}
+
+function bindMonthSwitcher(){
+  const p = document.getElementById("prevMonth");
+  const n = document.getElementById("nextMonth");
+  if(p) p.onclick = ()=>shiftMonth(-1);
+  if(n) n.onclick = ()=>shiftMonth(1);
+}
+
+function renderHome(){
+  pageTitle.textContent = "Apartman Aidat Yön...";
+  const totals = allTimeTotals();
+  const balance = totals.totalDuesIncome - totals.totalExpensePaid + totals.manualBalanceAdjustment;
+
+  const months6 = last6MonthKeys();
+  const monthVals = months6.map(mm=>{
+    const rec = state.months[mm.key] || {expenses:[],payments:{},duesAmount:0,duesApproved:false};
+    const income = rec.duesApproved ? state.residents.filter(r=>{
+      const isMgr = isResidentManager(r.id);
+      return !isMgr && rec.payments[r.id]&&rec.payments[r.id].paid;
+    }).length*rec.duesAmount : 0;
+    return income - monthPaidExpense(rec);
+  });
+  const maxVal = Math.max(1, ...monthVals.map(v=>Math.abs(v)));
+  const thisMonthVal = monthVals[monthVals.length-1];
+  const prevMonthVal = monthVals[monthVals.length-2] || 0;
+  const pct = prevMonthVal !== 0 ? Math.round(((thisMonthVal-prevMonthVal)/Math.abs(prevMonthVal))*1000)/10 : 0;
+
+  main.innerHTML = `
+    <div class="home-balance">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div class="lbl">Bakiye</div>
+        <button class="edit-balance-btn" id="editBalanceBtn">✏️</button>
+      </div>
+      <div class="val" style="color:${balance>=0?'var(--text)':'var(--red)'}">${fmtTL(balance)}</div>
+    </div>
+    <div class="grid2">
+      <div class="stat-card">
+        <div class="lbl">Toplam Gider</div>
+        <div class="val red">${fmtTL(totals.totalExpensePaid)}</div>
+      </div>
+      <div class="stat-card">
+        <div class="lbl">Toplam Gelir</div>
+        <div class="val green">${fmtTL(totals.totalDuesIncome)}</div>
+      </div>
+    </div>
+    <div class="chart-card">
+      <h2 class="section-title" style="margin-top:0;">Aylık Finansal Özet</h2>
+      <div class="chart-top">
+        <div class="chart-total">${fmtTL(thisMonthVal)}</div>
+        <div class="chart-badge">${pct>=0?'▲':'▼'} ${Math.abs(pct)}%</div>
+      </div>
+      <div class="bars">
+        ${months6.map((mm,i)=>{
+          const h = Math.max(6, Math.round((Math.abs(monthVals[i])/maxVal)*100));
+          const active = i===months6.length-1;
+          return `<div class="bar-col">
+            <div class="bar ${active?'active':''}" style="height:${h}%;"></div>
+            <div class="bar-lbl">${monthNamesShort[mm.m]}</div>
+          </div>`;
+        }).join("")}
+      </div>
+    </div>
+    <div class="menu-card">
+      ${menuItem("💰","Bakiyeler","Tüm bakiyeleri görüntüle","balances")}
+      ${menuItem("","Giderler","Giderleri takip et","expenses")}
+      ${menuItem("🧮","Aidat","Aidat hesapla","dues")}
+      ${menuItem("👥","Apartman Sakinleri","Sakinleri yönet","residents")}
+      ${menuItem("📒","İşlemler","İşlemleri görüntüle","tx")}
+      ${menuItem("⚙️","Ayarlar","Uygulama ayarları","settings")}
+    </div>
+  `;
+  
+  setTimeout(()=>{
+    const editBtn = document.getElementById("editBalanceBtn");
+    if(editBtn){
+      editBtn.onclick = ()=> openBalanceEditModal();
+    }
+  }, 10);
+  
+  main.querySelectorAll("[data-goto]").forEach(el=>{
+    el.onclick = ()=>{ state.tab = el.dataset.goto; persistAndRender(); };
+  });
+}
+
+function menuItem(ico,title,sub,goto){
+  return `<div class="menu-item" data-goto="${goto}">
+    <div class="menu-ico">${ico}</div>
+    <div class="menu-txt"><div class="t">${title}</div><div class="s">${sub}</div></div>
+    <div class="chev">›</div>
+  </div>`;
+}
+
+function openBalanceEditModal(){
+  const totals = allTimeTotals();
+  const currentBalance = totals.totalDuesIncome - totals.totalExpensePaid + totals.manualBalanceAdjustment;
+  
+  showModal(`
+    <h3>Genel Bakiye Düzenle</h3>
+    <div class="field">
+      <label>Mevcut Bakiye</label>
+      <input type="number" id="balanceEdit" value="${currentBalance}" step="0.01">
+    </div>
+    <div class="item-date" style="margin-bottom:10px;">Bu değer manuel olarak düzeltilecektir.</div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="cancelBtn">Vazgeç</button>
+      <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+    </div>
+  `);
+  
+  setTimeout(()=>{
+    document.getElementById("cancelBtn").onclick = closeModal;
+    document.getElementById("saveBtn").onclick = ()=>{
+      const newBalance = parseFloat(document.getElementById("balanceEdit").value) || 0;
+      const calculatedBalance = totals.totalDuesIncome - totals.totalExpensePaid;
+      const diff = newBalance - calculatedBalance;
+      if(!state.settings) state.settings = {};
+      state.settings.manualBalanceAdjustment = diff;
+      closeModal();
+      persistAndRender();
+      showToast("Bakiye düzenlendi: " + fmtTL(newBalance));
+    };
+  }, 10);
+}
+
+function renderExpenses(){
+  pageTitle.textContent = "Giderler";
+  const rec = currentRecord();
+  const total = monthTotalExpense(rec);
+  const paid = monthPaidExpense(rec);
+  main.innerHTML = `
+    ${monthSwitcher()}
+    <div class="grid2">
+      <div class="stat-card"><div class="lbl">Toplam Gider</div><div class="val orange">${fmtTL(total)}</div></div>
+      <div class="stat-card"><div class="lbl">Ödenen</div><div class="val green">${fmtTL(paid)}</div></div>
+    </div>
+    ${rec.expenses.length===0 ? emptyState("","Bu ay için henüz gider eklenmedi.") :
+      rec.expenses.map(e=>`
+      <div class="list-card">
+        <div class="row-between">
+          <div>
+            <div class="item-name">${escapeHtml(e.name)}${e.recurringId?' <span style="font-size:12px;color:var(--blue);font-weight:700;">(Otomatik)</span>':''}</div>
+            <div class="item-date">${e.date}</div>
+          </div>
+          <button class="edit-btn" data-edit="${e.id}">✏️</button>
+        </div>
+        <div class="row-between" style="margin-top:8px;">
+          <div class="item-amount">${fmtTL(e.amount)}</div>
+          <button class="pill ${e.paid?'paid':'unpaid'}" data-toggle="${e.id}">${e.paid?'Ödendi':'Ödenmedi'}</button>
+        </div>
+      </div>`).join("")}
+  `;
+  bindMonthSwitcher();
+  main.querySelectorAll("[data-toggle]").forEach(b=>{
+    b.onclick = ()=>{
+      const ex = rec.expenses.find(x=>x.id===b.dataset.toggle);
+      ex.paid = !ex.paid;
+      persistAndRender();
+    };
+  });
+  main.querySelectorAll("[data-edit]").forEach(b=>{
+    b.onclick = ()=> openExpenseModal(rec, rec.expenses.find(x=>x.id===b.dataset.edit));
+  });
+  fab.onclick = ()=> openExpenseModal(rec, null);
+}
+
+function openExpenseModal(rec, expense){
+  const isNew = !expense;
+  const isRecurring = !!(expense && expense.recurringId);
+  showModal(`
+    <h3>${isNew?'Yeni Gider':'Gideri Düzenle'}</h3>
+    <div class="field"><label>Gider Adı</label><input id="fName" value="${expense?escapeAttr(expense.name):''}" placeholder="Örn. Asansör Bakım"></div>
+    <div class="field"><label>Tutar (₺)</label><input id="fAmount" type="number" value="${expense?expense.amount:''}" placeholder="0"></div>
+    <div class="field"><label>Tarih</label><input id="fDate" value="${expense?expense.date:todayStr()}" placeholder="GG.AA.YYYY"></div>
+    <div class="toggle-row"><input type="checkbox" id="fPaid" ${expense && expense.paid?'checked':''}><label for="fPaid">Ödendi olarak işaretle</label></div>
+    <div class="toggle-row"><input type="checkbox" id="fRecurring" ${isRecurring?'checked':''}><label for="fRecurring">Her ay otomatik ekle</label></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="cancelBtn">Vazgeç</button>
+      <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+    </div>
+    ${!isNew?`<div style="text-align:center;margin-top:8px;"><button class="link-danger" id="delBtn">Gideri Sil</button></div>`:''}
+  `);
+  document.getElementById("cancelBtn").onclick = closeModal;
+  document.getElementById("saveBtn").onclick = ()=>{
+    const name = document.getElementById("fName").value.trim() || "Gider";
+    const amount = parseFloat(document.getElementById("fAmount").value) || 0;
+    const date = document.getElementById("fDate").value.trim() || todayStr();
+    const paid = document.getElementById("fPaid").checked;
+    const recurring = document.getElementById("fRecurring").checked;
+    if(isNew){
+      const newExpense = {id:cryptoId(), name, amount, date, paid};
+      if(recurring){
+        const tmplId = cryptoId();
+        state.recurringExpenses.push({id:tmplId, name, amount});
+        newExpense.recurringId = tmplId;
+      }
+      rec.expenses.push(newExpense);
+    }else{
+      expense.name = name; expense.amount = amount; expense.date = date; expense.paid = paid;
+      if(recurring && !expense.recurringId){
+        const tmplId = cryptoId();
+        state.recurringExpenses.push({id:tmplId, name, amount});
+        expense.recurringId = tmplId;
+      }else if(!recurring && expense.recurringId){
+        state.recurringExpenses = state.recurringExpenses.filter(t=>t.id!==expense.recurringId);
+        delete expense.recurringId;
+      }else if(recurring && expense.recurringId){
+        const tmpl = state.recurringExpenses.find(t=>t.id===expense.recurringId);
+        if(tmpl){ tmpl.name=name; tmpl.amount=amount; }
+      }
+    }
+    closeModal();
+    persistAndRender();
+    showToast(isNew?"Gider eklendi":"Gider güncellendi");
+  };
+  if(!isNew){
+    document.getElementById("delBtn").onclick = ()=>{
+      rec.expenses = rec.expenses.filter(x=>x.id!==expense.id);
+      closeModal();
+      persistAndRender();
+      showToast("Gider silindi");
+    };
+  }
+}
+
+function renderDues(){
+  pageTitle.textContent = "Aidat Hesapla";
+  const rec = currentRecord();
+  const totalExp = monthTotalExpense(rec);
+  const residentCount = state.residents.length;
+  const divisor = state.settings.managerPaysDues ? residentCount : (residentCount > 1 ? residentCount - 1 : 1);
+  const paidCount = residentsPaidCount(rec);
+  const suggested = residentCount>0 ? Math.round((totalExp/divisor)*100)/100 : 0;
+  const currentAmount = rec.duesAmount || suggested;
+
+  main.innerHTML = `
+    ${monthSwitcher()}
+    <div class="grid2">
+      <div class="stat-card"><div class="lbl">Toplam Giderler</div><div class="val orange">${fmtTL(totalExp)}</div></div>
+      <div class="stat-card"><div class="lbl">Toplam Sakin</div><div class="val" style="color:var(--text)">${residentCount}</div></div>
+    </div>
+    <div class="grid2">
+      <div class="stat-card"><div class="lbl">Aidat Ödeyenler</div><div class="val" style="color:var(--text)">${paidCount}</div></div>
+      <div class="stat-card"><div class="lbl">Daire Başına Aidat</div><div class="val" style="color:var(--text)">${fmtTL(currentAmount)}</div></div>
+    </div>
+    <div class="list-card">
+      <div class="field-lbl">Aidat Tutarı</div>
+      <input class="input-field" id="duesInput" type="number" value="${currentAmount}" ${rec.duesApproved?'disabled':''}>
+      <div class="btn-row">
+        <button class="btn btn-outline" id="revertBtn" ${!rec.duesApproved?'disabled':''}>Geri Al</button>
+        <button class="btn btn-primary" id="approveBtn" ${rec.duesApproved?'disabled':''}>Aidatı Onayla</button>
+      </div>
+      ${rec.duesApproved ? `<div class="confirm-box">✅ ${monthNamesFull[state.currentMonth]} ${state.currentYear} - ${fmtTL(rec.duesAmount)} Aidat onaylandı</div>` : ""}
+    </div>
+    <h2 class="section-title">Sakin Ödemeleri</h2>
+    ${state.residents.map(r=>{
+      const p = rec.payments[r.id] || {paid:false,date:""};
+      const isManager = isResidentManager(r.id);
+      const balance = residentBalance(r.id);
+      const balanceColor = isManager ? 'var(--green)' : (balance<=0?'var(--green)':'var(--red)');
+      const balanceText = isManager ? fmtTL(0) : (p.paid ? fmtTL(0) : '-'+fmtTL(balance));
+      return `
+      <div class="list-card" style="padding:12px 16px;">
+        <div class="row-between">
+          <div>
+            <div class="item-name" style="font-size:15px;">${escapeHtml(r.name)}${isManager?' <span style="font-size:11px;color:var(--blue);font-weight:700;">(Yönetici)</span>':''}</div>
+            ${p.date?`<div class="item-date">${p.date}</div>`:""}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div class="item-amount" style="font-size:16px;color:${balanceColor}">${balanceText}</div>
+            ${!isManager ? `<button class="pill ${p.paid?'paid':'unpaid'}" data-pay="${r.id}" ${!rec.duesApproved?'disabled style="opacity:.4"':''}>${p.paid?'Ödedi':'Ödemedi'}</button>` : '<span class="pill paid">Muaf</span>'}
+            <button class="edit-btn" data-editpay="${r.id}">✏️</button>
+          </div>
+        </div>
+      </div>`;
+    }).join("")}
+  `;
+  bindMonthSwitcher();
+  const approveBtn = document.getElementById("approveBtn");
+  approveBtn.onclick = ()=>{
+    const val = parseFloat(document.getElementById("duesInput").value) || 0;
+    rec.duesAmount = val;
+    rec.duesApproved = true;
+    persistAndRender();
+    showToast("Aidat onaylandı");
+  };
+  document.getElementById("revertBtn").onclick = ()=>{
+    rec.duesApproved = false;
+    persistAndRender();
+    showToast("Onay geri alındı");
+  };
+  main.querySelectorAll("[data-pay]").forEach(b=>{
+    b.onclick = ()=>{
+      if(!rec.duesApproved) return;
+      const id = parseInt(b.dataset.pay);
+      const cur = rec.payments[id] || {paid:false,date:""};
+      rec.payments[id] = {paid: !cur.paid, date: cur.date || todayStr()};
+      persistAndRender();
+    };
+  });
+  main.querySelectorAll("[data-editpay]").forEach(b=>{
+    b.onclick = ()=>{
+      const r = state.residents.find(x=>x.id===parseInt(b.dataset.editpay));
+      openPaymentModal(rec, r);
+    };
+  });
+}
+
+function openPaymentModal(rec, resident){
+  const p = rec.payments[resident.id] || {paid:false, date:todayStr()};
+  showModal(`
+    <h3>${escapeHtml(resident.name)} - Aidat</h3>
+    <div class="field"><label>Tarih</label><input id="pDate" value="${p.date||todayStr()}" placeholder="GG.AA.YYYY"></div>
+    <div class="toggle-row"><input type="checkbox" id="pPaid" ${p.paid?'checked':''}><label for="pPaid">Ödedi</label></div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="cancelBtn">Vazgeç</button>
+      <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+    </div>
+  `);
+  document.getElementById("cancelBtn").onclick = closeModal;
+  document.getElementById("saveBtn").onclick = ()=>{
+    const date = document.getElementById("pDate").value.trim() || todayStr();
+    const paid = document.getElementById("pPaid").checked;
+    rec.payments[resident.id] = {paid, date};
+    closeModal();
+    persistAndRender();
+    showToast("Ödeme güncellendi");
+  };
+}
+
+function renderTx(){
+  pageTitle.textContent = "İşlemler";
+  const rec = currentRecord();
+  const items = [];
+  state.residents.forEach((r,i)=>{
+    const p = rec.payments[r.id];
+    const isManager = isResidentManager(r.id);
+    if(rec.duesApproved && p && p.paid && !isManager){
+      items.push({
+        type:"income", name:"D("+(i+1)+") "+r.name, amount:rec.duesAmount,
+        date:p.date||monthEndDate(), sub: monthNamesFull[state.currentMonth]+" "+state.currentYear+" Aidatı",
+        residentId:r.id
+      });
+    }
+  });
+  rec.expenses.forEach(e=>{
+    if(e.paid){
+      items.push({type:"expense", name:"Genel İşlem", amount:e.amount, date:e.date, sub:"Gider Ödemesi: "+e.name, expenseId:e.id});
+    }
+  });
+  items.sort((a,b)=> b.date.split(".").reverse().join("").localeCompare(a.date.split(".").reverse().join("")));
+
+  main.innerHTML = `
+    ${monthSwitcher()}
+    ${items.length===0 ? emptyState("📒","Bu ay için işlem bulunmuyor.") :
+      items.map(it=>`
+      <div class="list-card">
+        <div class="row-between">
+          <div style="display:flex;gap:12px;align-items:flex-start;">
+            <div style="font-size:20px;">${it.type==='income'?'🏦':''}</div>
+            <div>
+              <div class="item-name">${escapeHtml(it.name)}</div>
+              <div class="item-date">${it.date}</div>
+              ${it.sub?`<div class="item-date">${escapeHtml(it.sub)}</div>`:""}
+            </div>
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;">
+            <div class="item-amount" style="color:${it.type==='income'?'var(--green)':'var(--red)'}">${fmtTL(it.amount)}</div>
+            <button class="edit-btn" data-tx-type="${it.type}" data-tx-id="${it.residentId!==undefined?it.residentId:it.expenseId}">✏️</button>
+          </div>
+        </div>
+      </div>`).join("")}
+  `;
+  bindMonthSwitcher();
+  main.querySelectorAll("[data-tx-type]").forEach(btn=>{
+    btn.onclick = ()=>{
+      if(btn.dataset.txType==='income'){
+        const r = state.residents.find(x=>x.id===parseInt(btn.dataset.txId));
+        openPaymentModal(rec, r);
+      }else{
+        const e = rec.expenses.find(x=>x.id===btn.dataset.txId);
+        openExpenseModal(rec, e);
+      }
+    };
+  });
+  fab.onclick = ()=> openExpenseModal(rec, null);
+}
+
+function monthEndDate(){
+  return "29."+String(state.currentMonth).padStart(2,"0")+"."+state.currentYear;
+}
+
+function renderBalances(){
+  pageTitle.textContent = "Bakiyeler";
+  const totals = allTimeTotals();
+  const totalBalance = totals.totalDuesIncome - totals.totalExpensePaid + totals.manualBalanceAdjustment;
+  const totalOwed = state.residents.reduce((s,r)=>s+residentBalance(r.id),0);
+
+  main.innerHTML = `
+    <div class="grid2">
+      <div class="stat-card"><div class="lbl">Toplam Bakiye</div><div class="val green">${fmtTL(totalBalance)}</div></div>
+      <div class="stat-card"><div class="lbl">Toplam Alacak</div><div class="val red">${fmtTL(totalOwed)}</div></div>
+    </div>
+    ${state.residents.map((r,i)=>{
+      const owed = residentBalance(r.id);
+      const isManager = isResidentManager(r.id);
+      const ok = owed===0;
+      const open = openResidentId===r.id;
+      const avatarClass = isManager ? 'ok' : (ok?'ok':'owe');
+      const amountColor = isManager ? 'var(--green)' : (ok?'var(--green)':'var(--red)');
+      const amountText = isManager ? fmtTL(0) : (ok? fmtTL(0) : '-'+fmtTL(owed));
+      return `
+      <div class="resident-row" data-res="${r.id}" style="flex-direction:column;align-items:stretch;">
+        <div class="row-between" style="cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div class="resident-avatar ${avatarClass}">${i+1}</div>
+            <div>
+              <div class="item-name" style="font-size:16px;">D(${i+1}) ${escapeHtml(r.name)}${isManager?' <span style="font-size:11px;color:var(--blue);font-weight:700;">(Yönetici)</span>':''}</div>
+              <div class="item-date" style="color:${amountColor};font-weight:700;">${amountText}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:5px;">
+            <button class="edit-btn" data-edit-bal="${r.id}">✏️</button>
+            <button class="whatsapp-btn" data-wa="${r.id}" title="WhatsApp">💬</button>
+            <div class="chev" style="transform:rotate(${open?90:0}deg);transition:.15s;">›</div>
+          </div>
+        </div>
+        <div class="resident-detail ${open?'open':''}">
+          ${isManager ? 'Yönetici aidat ödemiyor (Muaf).' : (owed===0 ? "Tüm aidatlar ödenmiş." : `${monthNamesFull[state.currentMonth]} dahil ödenmemiş aidat borcu bulunuyor.`)}
+          <div style="margin-top:8px;font-size:12px;color:var(--muted);">Manuel Düzelme: ${fmtTL(r.balanceAdjustment||0)}</div>
+        </div>
+      </div>`;
+    }).join("")}
+  `;
+  
+  setTimeout(()=>{
+    main.querySelectorAll("[data-res]").forEach(el=>{
+      el.querySelector(".row-between").onclick = (e)=>{
+        if(e.target.closest('[data-edit-bal]') || e.target.closest('[data-wa]')) return;
+        const id = parseInt(el.dataset.res);
+        openResidentId = openResidentId===id ? null : id;
+        renderBalances();
+      };
+    });
+    main.querySelectorAll("[data-edit-bal]").forEach(btn=>{
+      btn.onclick = (e)=>{
+        e.stopPropagation();
+        const r = state.residents.find(x=>x.id===parseInt(btn.dataset.editBal));
+        openResidentBalanceEditModal(r);
+      };
+    });
+    main.querySelectorAll("[data-wa]").forEach(btn=>{
+      btn.onclick = (e)=>{
+        e.stopPropagation();
+        const r = state.residents.find(x=>x.id===parseInt(btn.dataset.wa));
+        if(r && r.phone){
+          openWhatsApp(r.phone);
+        }else{
+          showToast('Telefon numarası bulunamadı');
+        }
+      };
+    });
+  }, 10);
+}
+
+function openResidentBalanceEditModal(resident){
+  const isManager = isResidentManager(resident.id);
+  if(isManager){
+    showToast("Yönetici bakiyesi düzenlenemez (Muaf)");
+    return;
+  }
+  showModal(`
+    <h3>${escapeHtml(resident.name)} - Bakiye Düzenle</h3>
+    <div class="field"><label>Manuel Bakiye Düzeltmesi (₺)</label><input id="bAdj" type="number" value="${resident.balanceAdjustment||0}" placeholder="0"></div>
+    <div class="item-date" style="margin-bottom:10px;">Pozitif değer borcu azaltır, negatif değer borcu artırır.</div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="cancelBtn">Vazgeç</button>
+      <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+    </div>
+  `);
+  setTimeout(()=>{
+    document.getElementById("cancelBtn").onclick = closeModal;
+    document.getElementById("saveBtn").onclick = ()=>{
+      const val = parseFloat(document.getElementById("bAdj").value) || 0;
+      resident.balanceAdjustment = val;
+      closeModal();
+      persistAndRender();
+      showToast("Bakiye düzenlendi");
+    };
+  }, 10);
+}
+
+function renderResidents(){
+  pageTitle.textContent = "Apartman Sakinleri";
+  main.innerHTML = `
+    <div class="month-switch" style="justify-content:flex-start;gap:10px;">
+      <span style="font-size:20px;">👥</span>
+      <div class="label" style="font-size:18px;">Toplam Sakin: ${state.residents.length}</div>
+    </div>
+    ${state.residents.map((r,i)=>{
+      const isManager = isResidentManager(r.id);
+      return `
+      <div class="list-card" style="display:flex;align-items:center;gap:14px;">
+        <div class="resident-avatar ${isManager?'ok':'neutral'}">${i+1}</div>
+        <div style="flex:1;">
+          <div class="item-name" style="font-size:16px;">D(${i+1}) ${escapeHtml(r.name)}${isManager?' <span style="font-size:11px;color:var(--blue);font-weight:700;">(Yönetici)</span>':''}</div>
+          ${r.phone?`<div class="item-date">📞 ${escapeHtml(r.phone)}</div>`:""}
+        </div>
+        <div style="display:flex;gap:5px;">
+          ${r.phone ? `<button class="whatsapp-btn" data-wa-res="${r.id}" title="WhatsApp">💬</button>` : ''}
+          <button class="edit-btn" data-edit-res="${r.id}">️</button>
+        </div>
+      </div>
+    `}).join("")}
+  `;
+  
+  setTimeout(()=>{
+    main.querySelectorAll("[data-wa-res]").forEach(btn=>{
+      btn.onclick = ()=>{
+        const r = state.residents.find(x=>x.id===parseInt(btn.dataset.waRes));
+        if(r && r.phone){
+          openWhatsApp(r.phone);
+        }else{
+          showToast('Telefon numarası bulunamadı');
+        }
+      };
+    });
+    main.querySelectorAll("[data-edit-res]").forEach(b=>{
+      b.onclick = ()=> openResidentModal(state.residents.find(x=>x.id===parseInt(b.dataset.editRes)));
+    });
+  }, 10);
+  
+  fab.onclick = ()=> openResidentModal(null);
+}
+
+function openResidentModal(resident){
+  const isNew = !resident;
+  const hasPhone = resident && resident.phone;
+  
+  showModal(`
+    <h3>${isNew?'Yeni Sakin':'Sakini Düzenle'}</h3>
+    <div class="field">
+      <label>Ad Soyad</label>
+      <input id="rName" value="${resident?escapeAttr(resident.name):''}" placeholder="Örn. Ahmet Doğru">
+    </div>
+    <div class="field">
+      <label>Telefon ${hasPhone ? '(Mevcut: ' + escapeHtml(resident.phone) + ')' : '(opsiyonel)'}</label>
+      <input id="rPhone" value="${resident&&resident.phone?escapeAttr(resident.phone):''}" placeholder="05xx xxx xx xx">
+      <button class="contact-picker-btn" onclick="pickContact()">
+        ${hasPhone ? '📞 Numarayı Değiştir' : '📱 Rehberden Numara Ekle'}
+      </button>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-outline" id="cancelBtn">Vazgeç</button>
+      <button class="btn btn-primary" id="saveBtn">Kaydet</button>
+    </div>
+    ${!isNew?`<div style="text-align:center;margin-top:8px;"><button class="link-danger" id="delBtn">Sakini Sil</button></div>`:''}
+  `);
+  setTimeout(()=>{
+    document.getElementById("cancelBtn").onclick = closeModal;
+    document.getElementById("saveBtn").onclick = ()=>{
+      const name = document.getElementById("rName").value.trim();
+      const phone = document.getElementById("rPhone").value.trim();
+      if(!name){ showToast("Lütfen bir ad girin"); return; }
+      if(isNew){
+        const newId = state.residents.length ? Math.max(...state.residents.map(r=>r.id))+1 : 1;
+        state.residents.push({id:newId, name, phone: phone||undefined, balanceAdjustment:0});
+      }else{
+        resident.name = name;
+        resident.phone = phone || undefined;
+      }
+      closeModal();
+      persistAndRender();
+      showToast(isNew?"Sakin eklendi":"Sakin güncellendi");
+    };
+    if(!isNew){
+      document.getElementById("delBtn").onclick = ()=>{
+        state.residents = state.residents.filter(x=>x.id!==resident.id);
+        closeModal();
+        persistAndRender();
+        showToast("Sakin silindi");
+      };
+    }
+  }, 10);
+}
+
+function renderSettings(){
+  pageTitle.textContent = "Ayarlar";
+  
+  const daireOptions = state.residents.map(r => 
+    `<option value="${r.id}" ${state.settings.managerDaireId == r.id ? 'selected' : ''}>D(${r.id}) ${escapeHtml(r.name)}</option>`
+  ).join('');
+  
+  main.innerHTML = `
+    <div class="list-card">
+      <h2 class="section-title" style="margin-top:0;">Yedekleme</h2>
+      <div class="toggle-row" style="margin-top:4px;">
+        <input type="checkbox" id="autoBackupToggle" ${state.settings.autoBackup?'checked':''}>
+        <label for="autoBackupToggle">Veriler değiştikçe otomatik yedek al</label>
+      </div>
+      <div class="field-lbl" style="margin-top:6px;">Yedekleme klasörü</div>
+      <div class="item-date" style="margin-bottom:10px;">${state.settings.backupFolderName? "Seçili klasör: "+escapeHtml(state.settings.backupFolderName) : "Henüz klasör seçilmedi"}</div>
+      <div class="btn-row" style="margin-top:0;">
+        <button class="btn btn-outline" id="chooseFolderBtn">Klasör Seç</button>
+        <button class="btn btn-primary" id="backupNowBtn">Şimdi Yedekle</button>
+      </div>
+      <div style="margin-top:16px;">
+        <div class="field-lbl">Yedekten geri yükle</div>
+        <input type="file" id="restoreInput" accept="application/json" style="margin-top:6px;width:100%;">
+      </div>
+    </div>
+    <div class="list-card">
+      <h2 class="section-title" style="margin-top:0;">Aidat Ayarları</h2>
+      <div class="toggle-row" style="margin-top:4px;">
+        <input type="checkbox" id="managerDuesToggle" ${state.settings.managerPaysDues?'checked':''}>
+        <label for="managerDuesToggle">Yönetici aidat ödüyor mu?</label>
+      </div>
+      <div class="field" style="margin-top:12px;">
+        <label>Yönetici Daire Numarası</label>
+        <select id="managerDaireSelect">
+          ${daireOptions}
+        </select>
+      </div>
+      <div class="item-date">Hayır seçilirse, giderler yönetici hariç diğer sakinlere paylaşılır ve yönetici borçlu gözükmez.</div>
+    </div>
+    <div class="list-card">
+      <h2 class="section-title" style="margin-top:0;">Otomatik Giderler</h2>
+      ${state.recurringExpenses.length===0 ? `<div class="item-date">Henüz otomatik (her ay tekrar eden) gider yok. Bir gideri eklerken "Her ay otomatik ekle" seçeneğini işaretleyin.</div>` :
+        state.recurringExpenses.map(t=>`
+          <div class="row-between" style="padding:8px 0;border-bottom:1px solid #f0f0f0;">
+            <div class="item-name" style="font-size:15px;">${escapeHtml(t.name)}</div>
+            <div class="item-amount" style="font-size:16px;">${fmtTL(t.amount)}</div>
+          </div>
+        `).join("")}
+    </div>
+  `;
+  
+  setTimeout(()=>{
+    document.getElementById("autoBackupToggle").onchange = (e)=>{
+      state.settings.autoBackup = e.target.checked;
+      persistAndRender();
+    };
+    document.getElementById("managerDuesToggle").onchange = (e)=>{
+      state.settings.managerPaysDues = e.target.checked;
+      persistAndRender();
+    };
+    document.getElementById("managerDaireSelect").onchange = (e)=>{
+      state.settings.managerDaireId = parseInt(e.target.value);
+      persistAndRender();
+    };
+    document.getElementById("backupNowBtn").onclick = downloadBackupNow;
+    document.getElementById("restoreInput").onchange = (e)=>{
+      if(e.target.files[0]) restoreFromFile(e.target.files[0]);
+    };
+  }, 10);
+}
+
+function emptyState(ico,text){
+  return `<div class="empty-state"><div class="big">${ico}</div>${text}</div>`;
+}
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function escapeAttr(s){ return escapeHtml(s); }
+function todayStr(){
+  const d = new Date();
+  return String(d.getDate()).padStart(2,"0")+"."+String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
+}
+
+function showModal(html){
+  document.getElementById("modalSheet").innerHTML = html;
+  document.getElementById("modalOverlay").classList.remove("hidden");
+}
+function closeModal(){
+  document.getElementById("modalOverlay").classList.add("hidden");
+}
+document.getElementById("modalOverlay").addEventListener("click",(e)=>{
+  if(e.target.id==="modalOverlay") closeModal();
+});
+
+let toastTimer;
+function showToast(msg){
+  const t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove("show"), 1800);
+}
+
+pdfBtn.addEventListener("click", ()=>{
+  showToast("PDF dışa aktarma için tarayıcı yazdırma kullanın");
+});
+
+document.querySelectorAll("nav button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    state.tab = b.dataset.tab;
+    persistAndRender();
+  });
+});
+
+(function init(){
+  const loaded = loadState();
+  state = loaded || defaultState();
+  if(!state.settings) state.settings = {autoBackup:true, backupFolderName:null, managerPaysDues:false, managerDaireId:9};
+  if(!state.recurringExpenses) state.recurringExpenses = [];
+  state.residents.forEach(r => { if(r.balanceAdjustment === undefined) r.balanceAdjustment = 0; });
+  render();
+})();
+</script>
+</body>
+</html>
