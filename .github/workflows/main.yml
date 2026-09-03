@@ -1,0 +1,44 @@
+name: Android APK Derle
+
+on:
+  push:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Depoyu Cek
+        uses: actions/checkout@v4
+
+      - name: Java JDK Kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Node.js Kur
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cordova Kur
+        run: npm install -g cordova
+
+      - name: Proje Hazirla ve HTML Kopyala
+        run: |
+          cordova create app com.tuncapartmani.aidat "TuncApartmani"
+          find . -maxdepth 1 -name "*.html" -exec cp {} app/www/index.html \;
+
+      - name: APK Derle
+        run: |
+          cd app
+          cordova platform add android
+          cordova build android --no-telemetry
+
+      - name: APK Dosyasini Yukle
+        uses: actions/upload-artifact@v4
+        with:
+          name: TuncApartmani-Aidat-APK
+          path: app/platforms/android/app/build/outputs/apk/debug/app-debug.apk
