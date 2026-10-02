@@ -151,7 +151,20 @@ app.addEventListener('click', async event => {
   else if (action === 'request-notification') { const r=await requestNotificationPermission(); toast(r.message,!r.ok); }
   else if (action === 'reset') { if(confirm('Tüm demo verileri bu cihazdan silinsin mi?')) { state=reset(seedState); priceRecords=[]; persist(); toast('Demo verileri sıfırlandı.'); } }
 });
-modalLayer.addEventListener('click', event => { if (event.target === modalLayer || event.target.closest('[data-action="close"]')) closeModal(); });
+modalLayer.addEventListener('click', async event => {
+  const target = event.target.closest('[data-action]');
+  if (event.target === modalLayer || target?.dataset.action === 'close') { closeModal(); return; }
+  if (!target) return;
+  if (target.dataset.action === 'request-notification') {
+    const r = await requestNotificationPermission();
+    toast(r.message, !r.ok);
+  }
+  if (target.dataset.action === 'delete-vehicle') {
+    state.vehicles = state.vehicles.filter(v => v.id !== target.dataset.id);
+    if (state.selectedVehicleId === target.dataset.id) state.selectedVehicleId = null;
+    closeModal(); persist(); toast('Araç kaldırıldı.');
+  }
+});
 document.addEventListener('change', event => { const input=event.target; if (!input.matches('[data-setting]')) return; const scope=input.dataset.scope; if(scope==='root') state[input.dataset.setting]=input.checked; else state.settings[input.dataset.setting]=input.checked; save(state); toast('Ayar kaydedildi.'); });
 document.addEventListener('submit', event => {
   const form=event.target.closest('form[data-form]'); if(!form) return; event.preventDefault(); const data=Object.fromEntries(new FormData(form));
