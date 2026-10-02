@@ -1,0 +1,11 @@
+{
+  "appId": "com.yakitalarmi.app",
+  "appName": "Yakıt Alarmı",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

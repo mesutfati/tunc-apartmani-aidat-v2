@@ -1,0 +1,21 @@
+{
+  "name": "yakit-alarmi",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Yakıt Alarmı vanilla web ve Capacitor Android test paketi",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "build": "node sync-web.mjs",
+    "cap:sync": "npm run build && npx cap sync android",
+    "android": "npx cap open android",
+    "apk:debug": "npm run cap:sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}
