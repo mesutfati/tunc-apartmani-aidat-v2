@@ -19,6 +19,7 @@ export const seedState = {
   pricesOnlyFavorites:false,
   gps:true,
   notificationTab:'current',
+  priceSnapshots:{},
   vehicleTab:'vehicles',
   selectedVehicleId:null,
   vehicles:[],
@@ -30,6 +31,10 @@ export const seedState = {
   activeTrip:null,
   parks:[{ id:'park-seed', title:'Rıhtım Otoparkı', date:'Dün, 18:46', note:'İskeleye 3 dk' }],
   accidents:[],
+  receipts:[],
+  healthSnapshot:null,
+  healthReport:null,
+  obdDevice:null,
   hgs:[{ id:'hgs-seed', title:'15 Temmuz Şehitler Köprüsü', date:'28 Eyl', amount:47.25 }],
   settings:{ notifications:true, autoBackup:false, motionTracking:false, mileage:28460 },
   notifications:[

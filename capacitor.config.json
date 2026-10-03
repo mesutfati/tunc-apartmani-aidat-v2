@@ -7,5 +7,15 @@
   },
   "android": {
     "allowMixedContent": false
+  },
+  "plugins": {
+    "BluetoothLe": {
+      "displayStrings": {
+        "scanning": "OBD adaptörleri taranıyor…",
+        "cancel": "Vazgeç",
+        "availableDevices": "Yakındaki cihazlar",
+        "noDeviceFound": "OBD adaptörü bulunamadı"
+      }
+    }
   }
 }

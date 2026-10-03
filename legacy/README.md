@@ -1,0 +1,1 @@
+Bu klasör, seçili GitHub deposunda daha önce bulunan Apartman Aidat uygulaması için koruma alanıdır. Yeni Yakıt Alarmı uygulaması kök dizinde geliştirilir; uzak depo eşitlemesinde eski kaynak dosya bu klasöre taşınarak korunacaktır.
