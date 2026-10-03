@@ -27,10 +27,6 @@ function parsePetrolOfisi(text, city) {
   if (values.length < 6) return null;
   return { benzin:values[0], motorin:values[1], lpg:values[5] };
 }
-function fallbackFor(city, type) {
-  const base = districts[0]?.[type] || 52.48; return base + (city === 'Ankara' ? 1.1 : city === 'İzmir' ? 1.4 : 0);
-}
-
 export async function getFuelPrices({ city='İstanbul', type='benzin' } = {}) {
   let live = null; let liveText = '';
   try {
@@ -47,9 +43,9 @@ export async function getFuelPrices({ city='İstanbul', type='benzin' } = {}) {
     } catch (proxyError) { /* APK veya statik yayın proxy olmadan yerel önbelleğe düşer. */ }
     live = null;
   }
-  const source = live ? FUEL_SOURCES.petrolOfisi : FUEL_SOURCES.epdk;
-  const liveAt = live ? new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'}) : 'Canlı erişim yok · yerel önbellek';
-  const rows = districts.map(item => ({ city, district:item.name, price:live?.[type] ?? fallbackFor(city,type), updatedAt:liveAt, source:live ? source.name : 'Yerel önbellek', live:Boolean(live), cityReference:true, sourceUrl:source.url, type }));
-  rows.meta = { live:Boolean(live), source, checkedAt:new Date().toISOString(), note:live ? 'İl referans fiyatı canlı olarak okundu; ilçe satırları aynı il referansını gösterir.' : 'Canlı kaynak erişilemedi; gösterim güvenilir kaynak adapterı hazır olana kadar yerel veridir.', epdkPrimary:FUEL_SOURCES.epdk };
+  const source = live ? FUEL_SOURCES.petrolOfisi : { name:'Canlı veri alınamadı', role:'Rakam gösterilmiyor; tekrar deneyin.', url:FUEL_SOURCES.epdk.url };
+  const liveAt = live ? new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short'}) : 'Canlı veri alınamadı';
+  const rows = districts.map(item => ({ city, district:item.name, price:live?.[type] ?? null, updatedAt:liveAt, source:live ? source.name : 'Gösterim yok', live:Boolean(live), cityReference:true, sourceUrl:source.url, type }));
+  rows.meta = { live:Boolean(live), source, checkedAt:new Date().toISOString(), note:live ? 'İl referans fiyatı canlı olarak okundu; ilçe satırları aynı il referansını gösterir.' : 'Ağ kaynağına erişilemediği için sahte veya eski rakam gösterilmiyor.', epdkPrimary:FUEL_SOURCES.epdk };
   return rows;
 }

@@ -10,6 +10,8 @@
   - Tarihli ve il bazlı benzin, motorin ve otogaz pompa fiyatlarını yayımlar.
   - Uygulama canlı erişim mümkün olduğunda bu sayfadan il referansını okur; ilçe satırlarında il referansı açıkça belirtilir.
 
+Bildirim politikası: Uygulama haber sitelerinden veya sosyal medya tahminlerinden “yarın zam gelecek” bildirimi üretmez. Yalnızca aynı yakıt ve il için iki ayrı canlı kaynak okumasında fiyat farkı doğrulanırsa “fiyat artışı/düşüşü doğrulandı” bildirimi oluşturur. Canlı kaynak erişilemezse fiyat yerine `—` gösterilir ve bildirim üretilmez.
+
 ## OBD-II
 
 - **OBD-II PID tablosu / SAE J1979 dönüşümleri:** https://www.csselectronics.com/pages/obd2-pid-table-on-board-diagnostics-j1979
