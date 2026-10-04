@@ -17,19 +17,35 @@ async function getText(url, options = {}) {
   try {
     const response = await fetch(url, { ...options, cache:'no-store', signal:controller.signal, headers:{ 'User-Agent':'YakitAlarmi/early-warning', ...(options.headers || {}) } });
     const text = await response.text();
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+      const fault = text.match(/<(?:[^:>]+:)?(?:faultstring|Text)[^>]*>([\s\S]*?)<\/(?:[^:>]+:)?(?:faultstring|Text)>/i)?.[1];
+      throw new Error(clean(fault || `HTTP ${response.status}`));
+    }
     return text;
   } finally { clearTimeout(timer); }
 }
 
 async function epdkXml(url, code) {
+  const serviceName = url.split('/').pop();
+  const soapBody = `<?xml version="1.0" encoding="UTF-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:gen="http://genel.service.ws.epvys.g222.tubitak.gov.tr/"><soapenv:Header/><soapenv:Body><gen:genelSorgu><gen:sorguNo>72</gen:sorguNo><gen:parametreler>${code}</gen:parametreler></gen:genelSorgu></soapenv:Body></soapenv:Envelope>`;
   const urls = [
     `${url}?sorguNo=72&parametre=${encodeURIComponent(code)}`,
     `${url}?sorguNo=72&parametreler=${encodeURIComponent(code)}`,
+    `${url}?sorguNo=72&ilKodu=${encodeURIComponent(code)}`,
   ];
   let lastError = null;
+  const remember = error => {
+    const current = error?.message || '';
+    const previous = lastError?.message || '';
+    if (!lastError || /yetki|yetkiniz|sorgu/i.test(current) || !/yetki|yetkiniz|sorgu/i.test(previous)) lastError = error;
+  };
   for (const candidate of urls) {
-    try { return await getText(candidate); } catch (error) { lastError = error; }
+    try { return await getText(candidate); } catch (error) { remember(error); }
+  }
+  for (const suffix of ['HttpSoap11Endpoint', 'HttpSoap12Endpoint']) {
+    try {
+      return await getText(`${url}.${serviceName}${suffix}`, { method:'POST', headers:{ 'Content-Type':suffix.includes('12') ? 'application/soap+xml; charset=utf-8' : 'text/xml; charset=utf-8', SOAPAction:'genelSorgu' }, body:soapBody });
+    } catch (error) { remember(error); }
   }
   throw lastError || new Error('EPDK servisi cevap vermedi.');
 }
@@ -97,7 +113,7 @@ export async function getEarlyWarningLive({ provinceCode='34' } = {}) {
   const dateMatch = `${fuel.status === 'fulfilled' ? fuel.value : ''} ${lpg.status === 'fulfilled' ? lpg.value : ''}`.match(/\b(\d{1,2}[./-]\d{1,2}[./-]\d{4})\b/);
   if (dateMatch) sourceDate = dateMatch[1];
   const hasFuel = Object.values(prices).some(value => Number.isFinite(value));
-  return { ok:hasFuel, province:code, prices, usdTry:Number.isFinite(usdTry) ? usdTry : null, timestamp:isoNow(), sourceDate, checkedAt:new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Istanbul'}), source:{ epdk:'https://www.epdk.gov.tr/Detay/Icerik/3-0-158/akaryak%C4%B1tfiyat', epdkFuel:EPDK_FUEL, epdkLpg:EPDK_LPG, tcmb:TCMB_URL }, errors, disclaimer:'Bu skor kesin zam tahmini değildir. EPDK/TCMB canlı ölçümü ve cihazda biriken en az iki tarihli kayıtla hesaplanan erken uyarı baskı göstergesidir.' };
+  return { ok:hasFuel, province:code, prices, usdTry:Number.isFinite(usdTry) ? usdTry : null, timestamp:isoNow(), sourceDate, checkedAt:new Date().toLocaleString('tr-TR',{dateStyle:'short',timeStyle:'short',timeZone:'Europe/Istanbul'}), source:{ epdk:'https://www.epdk.gov.tr/Detay/Icerik/3-0-158/akaryak%C4%B1tfiyat', epdkFuel:EPDK_FUEL, epdkLpg:EPDK_LPG, tcmb:TCMB_URL }, errors, authorityStatus:errors.some(error => /yetki|yetkiniz/i.test(error)) ? 'EPDK resmi SOAP servisi sorgu yetkisi istiyor; fiyat puanı uydurulmadı.' : null, disclaimer:'Bu skor kesin zam tahmini değildir. EPDK/TCMB canlı ölçümü ve cihazda biriken en az iki tarihli kayıtla hesaplanan erken uyarı baskı göstergesidir.' };
 }
 
 export { riskScore };

@@ -11,7 +11,7 @@ import { corollaIcon } from './services/vehicle-art.js';
 import { analyzeVehicleHealth, demoHealthSnapshot, obdMetrics } from './services/health-analysis.js';
 import { connectObdClassic, readObdSnapshot, obdSourceNote, demoObdSnapshot } from './services/obd.js';
 import { FUEL_ALERT_SOURCES, alertPolicy } from './services/fuel-alerts.js';
-import { riskScore } from './services/early-warning.js';
+import { getEarlyWarningLive, riskScore } from './services/early-warning.js';
 import { provinceCodes } from './data/province-codes.js';
 
 const app = document.querySelector('#app');
@@ -95,18 +95,35 @@ function earlyWarningResultModal(payload, risk, errorMessage = '') {
     ['EPDK motorin', payload?.prices?.motorin],
     ['EPDK LPG', payload?.prices?.lpg],
     ['TCMB USD satış', payload?.usdTry],
-    ['Kaynak tarihi', payload?.sourceDate || 'Kaynakta tarih yayınlanmadı'],
+    ['Kaynak tarihi', payload?.sourceDate || (payload?.fuelFallback ? payload.fallbackUpdatedAt : null) || 'Kaynakta tarih yayınlanmadı'],
     ['Kontrol zamanı', payload?.checkedAt || displayNow()],
   ].map(([label,value]) => `<div class="metric-row"><span>${esc(label)}</span><b>${typeof value === 'number' ? (label.includes('USD') ? `${value.toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4})} ₺` : `${value.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})} ₺/L`) : esc(value || '—')}</b></div>`).join('');
   const move = risk?.fuelMove == null ? 'İkinci tarihli yakıt ölçümü bekleniyor' : `Yakıt değişimi: ${risk.fuelMove.toFixed(2).replace('.',',')}% · USD değişimi: ${risk.usdMove.toFixed(2).replace('.',',')}%`;
-  openModal('Zam baskısı analizi', payload?.disclaimer || 'ZIP içindeki EPDK + TCMB erken uyarı yaklaşımı.',`${errorMessage ? `<div class="notice-card warning"><div class="notice-icon">${ico('alert',20)}</div><div><strong>Canlı EPDK ölçümü alınamadı</strong><p>${esc(errorMessage)}</p></div></div>` : ''}<div class="health-summary"><div class="health-score large ${risk?.level === 'YÜKSEK' || risk?.level === 'ÇOK YÜKSEK' ? 'warn':''}"><strong>${risk?.score == null ? '—' : risk.score}</strong><span>/100</span></div><div><b>${esc(risk?.level || 'VERİ YOK')}</b><p>${esc(risk?.reason || move)}</p></div></div><div class="metric-list">${rows}</div><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">${esc(move)}. Bu gösterge fiyatın kesin artacağını söylemez; iki tarihli canlı ölçüm yoksa puan üretmez. ${payload?.errors?.length ? `Hatalar: ${payload.errors.join(' · ')}` : ''}</p><button class="primary-button full-button" data-action="close">Kapat</button>`);
+  const fallbackNotice = payload?.fuelFallback ? `<div class="notice-card"><div class="notice-icon">${ico('chart',20)}</div><div><strong>Güncel yakıt fallback’i kullanıldı</strong><p>EPDK resmi SOAP servisi yetki gerektirdiği için seçili yakıt değeri canlı dağıtıcı ortalamasından alındı: ${esc(payload.fuelSourceLabel || 'çoklu kaynak')}. Bu değer zam baskısı geçmişi için kullanılır; EPDK resmi sonucu değildir.</p></div></div>` : '';
+  openModal('Zam baskısı analizi', payload?.disclaimer || 'ZIP içindeki EPDK + TCMB erken uyarı yaklaşımı.',`${errorMessage ? `<div class="notice-card warning"><div class="notice-icon">${ico('alert',20)}</div><div><strong>Resmi EPDK ölçümü alınamadı</strong><p>${esc(errorMessage)}</p></div></div>` : ''}${fallbackNotice}<div class="health-summary"><div class="health-score large ${risk?.level === 'YÜKSEK' || risk?.level === 'ÇOK YÜKSEK' ? 'warn':''}"><strong>${risk?.score == null ? '—' : risk.score}</strong><span>/100</span></div><div><b>${esc(risk?.level || 'VERİ YOK')}</b><p>${esc(risk?.reason || move)}</p></div></div><div class="metric-list">${rows}</div><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">${esc(move)}. Bu gösterge fiyatın kesin artacağını söylemez; iki tarihli canlı ölçüm yoksa puan üretmez. ${payload?.errors?.length ? `Hatalar: ${payload.errors.join(' · ')}` : ''}</p><button class="primary-button full-button" data-action="close">Kapat</button>`);
 }
 async function earlyWarningModal() {
   openModal('Zam baskısı analizi','EPDK il bazlı fiyat servisi ve TCMB günlük gösterge kuru kontrol ediliyor…','<div class="empty-card"><p>Canlı resmi kaynak yanıtı bekleniyor. Veri alınamazsa puan uydurulmaz.</p></div>');
   try {
     const code = provinceCodes[state.location.city] || '34';
-    const response = await fetch(`/api/early-warning?province=${encodeURIComponent(code)}`, { cache:'no-store' });
-    const payload = await response.json();
+    let payload;
+    let apiError = '';
+    try {
+      const response = await fetch(`/api/early-warning?province=${encodeURIComponent(code)}&city=${encodeURIComponent(state.location.city)}&type=${encodeURIComponent(state.fuelType)}`, { cache:'no-store' });
+      if (!response.ok) throw new Error(`Erken uyarı API HTTP ${response.status}`);
+      payload = await response.json();
+    } catch (error) {
+      apiError = error.message;
+      payload = await getEarlyWarningLive({ provinceCode:code });
+      payload.errors = [...(payload.errors || []), `Yerel API: ${apiError}`];
+    }
+    if (!Number.isFinite(Number(payload.prices?.[state.fuelType]))) {
+      try {
+        const rows = await getFuelPrices({ city:state.location.city, type:state.fuelType });
+        const selected = rows.find(row => row.live && row.district === state.location.district) || rows.find(row => row.live);
+        if (selected?.price != null) payload = { ...payload, ok:true, fuelFallback:true, fuelSourceLabel:`${selected.sourceCount} canlı dağıtıcı kaynağı`, fallbackUpdatedAt:selected.updatedAt, prices:{ ...payload.prices, [state.fuelType]:selected.price } };
+      } catch (error) { payload.errors = [...(payload.errors || []), `Canlı fiyat fallback’i: ${error.message}`]; }
+    }
     const current = Number(payload.prices?.[state.fuelType]);
     const historyKey = `${code}:${state.fuelType}`;
     const previous = state.earlyWarningHistory?.[historyKey];
@@ -116,7 +133,7 @@ async function earlyWarningModal() {
     state.earlyWarning = earlyWarning;
     save(state);
     render();
-    earlyWarningResultModal(payload, risk, payload.ok ? '' : (payload.errors || []).join(' · ') || 'EPDK servisi yanıt vermedi.');
+    earlyWarningResultModal(payload, risk, payload.ok && !payload.authorityStatus ? '' : (payload.authorityStatus || (payload.errors || []).join(' · ') || 'Resmi kaynak yanıtı alınamadı.'));
   } catch (error) {
     earlyWarning = { risk:{ level:'VERİ YOK', score:null, reason:'Erken uyarı servisine erişilemedi.' }, checkedAt:displayNow() };
     state.earlyWarning = earlyWarning; save(state); render();
