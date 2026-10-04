@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">Yakıt Alarmı</string>
-    <string name="title_activity_main">Yakıt Alarmı</string>
+    <string name="app_name">Sürüş Cepte</string>
+    <string name="title_activity_main">Sürüş Cepte</string>
     <string name="package_name">com.yakitalarmi.app</string>
     <string name="custom_url_scheme">com.yakitalarmi.app</string>
 </resources>

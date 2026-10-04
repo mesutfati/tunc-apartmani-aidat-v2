@@ -1,6 +1,6 @@
-# Yakıt Alarmı
+# Sürüş Cepte
 
-Hafif, mobil öncelikli vanilla HTML/CSS/JavaScript Yakıt Alarmı demosu.
+Hafif, mobil öncelikli vanilla HTML/CSS/JavaScript sürücü yardımcısı. Yakıt fiyatları, sürüş, park, kaza tutanağı, acil durum, sigorta, bakım ve araç sağlığını tek uygulamada toplar.
 
 ## Web önizleme
 

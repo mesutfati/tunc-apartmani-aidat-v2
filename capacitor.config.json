@@ -1,6 +1,6 @@
 {
   "appId": "com.yakitalarmi.app",
-  "appName": "Yakıt Alarmı",
+  "appName": "Sürüş Cepte",
   "webDir": "www",
   "server": {
     "androidScheme": "https"
