@@ -33,6 +33,8 @@ export const seedState = {
   parks:[],
   emergencies:[],
   accidents:[],
+  insurance:[],
+  maintenance:[],
   receipts:[],
   healthSnapshot:null,
   healthReport:null,
