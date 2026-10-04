@@ -22,14 +22,13 @@ Erişilebilen kaynakların rakamları **basit aritmetik ortalama** olarak hesapl
 Güncel fiyat tablosu ile “zam gelecek” bilgisi ayrı tutulur. Önceden duyuru için uygulamada şu sayfalar kaynak kataloğu olarak takip edilir:
 
 - **PÜİS duyuruları:** https://www.puis.org.tr/tum-haberler — sektör açıklaması ve erken sinyal olabilir; kesin fiyat değildir.
-- **EPGİS haberleri:** https://epgis.org.tr/haberler — sektör duyurusu/beklenti; resmi pompa fiyatı olarak kabul edilmez.
 - **EPDK duyuruları ve fiyat sayfası:** https://www.epdk.gov.tr/Detay/Icerik/3-0-158/akaryak%C4%B1tfiyat — resmi kurum kararı ve bayi fiyatı referansı.
 - **Resmî Gazete:** https://www.resmigazete.gov.tr/ — yürürlüğe giren vergi ve düzenleme kararlarının hukuki kaydı.
 - **Ekonomi basını:** https://www.ekonomim.com/ekonomi/akaryakit — yalnızca ikincil doğrulama; tek başına bildirim üretmez.
 
 ### Bildirim politikası
 
-- PÜİS/EPGİS veya ekonomi basınında görülen “beklenti” içerikleri kesin zam gibi sunulmaz; ürün, tutar ve yürürlük tarihi açıkça yazıyorsa **Beklenti** etiketiyle gösterilir.
+- PÜİS veya ekonomi basınında görülen “beklenti” içerikleri kesin zam gibi sunulmaz; ürün, tutar ve yürürlük tarihi açıkça yazıyorsa **Beklenti** etiketiyle gösterilir. EPGİS'in fiyat duyurusu faaliyetlerine 2022'de ara verdiği bilgisi doğrulandığından aktif kaynak listesine dahil edilmez.
 - EPDK veya Resmî Gazete tarafından doğrulanmayan bir haber “kesinleşti” şeklinde bildirilmez.
 - Güncel fiyat değişikliği bildirimi yalnızca aynı ürün/il için iki ayrı canlı dağıtıcı kaynağında ortalama değişimi görüldüğünde oluşturulur.
 - Kaynak erişilemezse uygulama rakam uydurmaz ve bildirim üretmez.
