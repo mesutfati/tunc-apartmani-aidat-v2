@@ -12,6 +12,7 @@ dependencies {
     implementation project(':capacitor-community-bluetooth-le')
     implementation project(':capacitor-community-image-to-text')
     implementation project(':capacitor-camera')
+    implementation project(':capacitor-local-notifications')
     implementation project(':e-is-capacitor-bluetooth-serial')
 
 }

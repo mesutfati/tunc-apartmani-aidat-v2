@@ -11,6 +11,7 @@ const vendor = [
   ['node_modules/@capacitor-community/image-to-text/dist/plugin.js', 'ocr.js'],
   ['node_modules/@capacitor-community/bluetooth-le/dist/plugin.js', 'bluetooth-le.js'],
   ['node_modules/@e-is/capacitor-bluetooth-serial/dist/plugin.js', 'bluetooth-serial.js'],
+  ['node_modules/@capacitor/local-notifications/dist/plugin.js', 'local-notifications.js'],
 ];
 for (const [source, target] of vendor) if (existsSync(source)) cpSync(source, `${output}/vendor/${target}`);
 if (existsSync('www/public/manus-routes.json')) cpSync('www/public/manus-routes.json', 'www/manus-routes.json');

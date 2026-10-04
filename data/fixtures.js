@@ -22,6 +22,7 @@ export const seedState = {
   gps:true,
   notificationTab:'current',
   priceSnapshots:{},
+  earlyWarningHistory:{},
   vehicleTab:'vehicles',
   selectedVehicleId:null,
   vehicles:[],

@@ -2,6 +2,7 @@ import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { getFuelPrices } from './services/fuel-prices.js';
+import { getEarlyWarningLive } from './services/early-warning.js';
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3000);
@@ -13,6 +14,21 @@ http.createServer((req, res) => {
     getFuelPrices({ city:requestUrl.searchParams.get('city') || 'İstanbul', type:requestUrl.searchParams.get('type') || 'benzin' })
       .then(rows => { const payload = { rows:[...rows], meta:rows.meta }; res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify(payload)); })
       .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8' }); res.end(JSON.stringify({ error:error.message })); });
+    return;
+  }
+  if (requestUrl.pathname === '/api/early-warning') {
+    const city = requestUrl.searchParams.get('city') || 'İstanbul';
+    const type = requestUrl.searchParams.get('type') || 'benzin';
+    getEarlyWarningLive({ provinceCode:requestUrl.searchParams.get('province') || '34' })
+      .then(async payload => {
+        if (!payload.ok || !Number.isFinite(Number(payload.prices?.[type]))) {
+          const rows = await getFuelPrices({ city, type });
+          const selected = rows.find(row => row.live && row.district === (city === 'İstanbul' ? 'Kadıköy' : city)) || rows.find(row => row.live);
+          if (selected?.price != null) payload = { ...payload, ok:true, fuelFallback:true, fuelSourceLabel:`Canlı dağıtıcı ortalaması (${selected.sourceCount} kaynak)`, fallbackUpdatedAt:selected.updatedAt, prices:{ ...payload.prices, [type]:selected.price }, fallbackCity:city };
+        }
+        res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify(payload));
+      })
+      .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok:false, error:error.message })); });
     return;
   }
   const raw = decodeURIComponent((req.url || '/').split('?')[0]);

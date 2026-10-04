@@ -3,7 +3,7 @@ import { load, save, reset, exportBackup, importBackup } from './services/storag
 import { getFuelPrices } from './services/fuel-prices.js';
 import { FUEL_SOURCES } from './services/fuel-prices.js';
 import { requestCurrentPosition } from './services/gps.js';
-import { requestNotificationPermission } from './services/notifications.js';
+import { requestNotificationPermission, scheduleFuelNotification } from './services/notifications.js';
 import { readReceipt } from './services/receipt-ocr.js';
 import { demoGoogleSignIn } from './services/auth.js';
 import { queueCloudBackup } from './services/cloud-backup.js';
@@ -11,6 +11,8 @@ import { corollaIcon } from './services/vehicle-art.js';
 import { analyzeVehicleHealth, demoHealthSnapshot, obdMetrics } from './services/health-analysis.js';
 import { connectObdClassic, readObdSnapshot, obdSourceNote, demoObdSnapshot } from './services/obd.js';
 import { FUEL_ALERT_SOURCES, alertPolicy } from './services/fuel-alerts.js';
+import { riskScore } from './services/early-warning.js';
+import { provinceCodes } from './data/province-codes.js';
 
 const app = document.querySelector('#app');
 const modalLayer = document.querySelector('#modalLayer');
@@ -19,6 +21,7 @@ let state = load(seedState);
 let priceRecords = [];
 let healthSnapshot = state.healthSnapshot || null;
 let healthReport = state.healthReport || (healthSnapshot ? analyzeVehicleHealth(healthSnapshot) : null);
+let earlyWarning = state.earlyWarning || null;
 let tripWatchId = null;
 let lastTripPersistAt = 0;
 
@@ -77,6 +80,49 @@ function notificationPanel() {
   const current = state.notificationTab === 'current'; const items = current ? state.notifications.filter(n => !n.seen) : state.notifications;
   return `<section><div class="section-head"><h3>Akaryakıt Bildirimleri</h3><button class="text-button" data-action="fuel-alert-sources">Duyuru kaynakları</button></div><div class="pill-tabs"><button data-action="notif-tab" data-tab="current" class="${current?'active':''}">Güncel</button><button data-action="notif-tab" data-tab="history" class="${!current?'active':''}">Geçmiş</button></div>${items.length ? items.slice(0,1).map(n => `<div class="notice-card"><div class="notice-icon">${ico(n.kind === 'down' ? 'chart':'bell',20)}</div><div><strong>${n.kind === 'down'?'Fiyat düşüşü doğrulandı':n.kind === 'up'?'Fiyat artışı doğrulandı':'Fiyat güncellemesi'} <span class="chip teal">${esc(n.date)}</span></strong><p>${esc(n.text)}</p></div></div>`).join('') : `<div class="notice-card"><div class="notice-icon">${ico('check',20)}</div><div><strong>Doğrulanmış uyarı yok</strong><p>Güncel fiyat ortalaması en az iki canlı kaynakla karşılaştırılmadan kesin zam veya indirim bildirimi gönderilmez.</p></div></div>`}</section>`;
 }
+function earlyWarningPanel() {
+  const result = earlyWarning?.risk;
+  const level = result?.level || 'ANALİZ BEKLENİYOR';
+  const tone = level === 'YÜKSEK' || level === 'ÇOK YÜKSEK' ? 'warn' : level === 'VERİ YOK' ? 'muted-risk' : '';
+  const checked = earlyWarning?.checkedAt ? `Son kontrol: ${earlyWarning.checkedAt}` : 'EPDK + TCMB canlı ölçümüyle kontrol edilir';
+  return `<section class="early-warning-card ${tone}"><div class="early-warning-head"><div><div class="eyebrow"><i class="eyebrow-dot"></i>ZAM ERKEN UYARISI</div><h3>${level}</h3><p>Kesin zam tahmini değil; EPDK il fiyatı ve TCMB kuru baskı göstergesi.</p></div><strong class="early-score">${result?.score == null ? '—' : `${result.score}`}<small>/100</small></strong></div><div class="early-warning-foot"><span>${esc(checked)}</span><button class="secondary-button" data-action="early-warning">${earlyWarning ? 'Yenile' : 'Analiz et'}</button></div></section>`;
+}
+function earlyWarningResultModal(payload, risk, errorMessage = '') {
+  const fuel = payload?.prices?.[state.fuelType];
+  const rows = [
+    ['Seçili il', state.location.city],
+    ['EPDK benzin', payload?.prices?.benzin],
+    ['EPDK motorin', payload?.prices?.motorin],
+    ['EPDK LPG', payload?.prices?.lpg],
+    ['TCMB USD satış', payload?.usdTry],
+    ['Kaynak tarihi', payload?.sourceDate || 'Kaynakta tarih yayınlanmadı'],
+    ['Kontrol zamanı', payload?.checkedAt || displayNow()],
+  ].map(([label,value]) => `<div class="metric-row"><span>${esc(label)}</span><b>${typeof value === 'number' ? (label.includes('USD') ? `${value.toLocaleString('tr-TR',{minimumFractionDigits:4,maximumFractionDigits:4})} ₺` : `${value.toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2})} ₺/L`) : esc(value || '—')}</b></div>`).join('');
+  const move = risk?.fuelMove == null ? 'İkinci tarihli yakıt ölçümü bekleniyor' : `Yakıt değişimi: ${risk.fuelMove.toFixed(2).replace('.',',')}% · USD değişimi: ${risk.usdMove.toFixed(2).replace('.',',')}%`;
+  openModal('Zam baskısı analizi', payload?.disclaimer || 'ZIP içindeki EPDK + TCMB erken uyarı yaklaşımı.',`${errorMessage ? `<div class="notice-card warning"><div class="notice-icon">${ico('alert',20)}</div><div><strong>Canlı EPDK ölçümü alınamadı</strong><p>${esc(errorMessage)}</p></div></div>` : ''}<div class="health-summary"><div class="health-score large ${risk?.level === 'YÜKSEK' || risk?.level === 'ÇOK YÜKSEK' ? 'warn':''}"><strong>${risk?.score == null ? '—' : risk.score}</strong><span>/100</span></div><div><b>${esc(risk?.level || 'VERİ YOK')}</b><p>${esc(risk?.reason || move)}</p></div></div><div class="metric-list">${rows}</div><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">${esc(move)}. Bu gösterge fiyatın kesin artacağını söylemez; iki tarihli canlı ölçüm yoksa puan üretmez. ${payload?.errors?.length ? `Hatalar: ${payload.errors.join(' · ')}` : ''}</p><button class="primary-button full-button" data-action="close">Kapat</button>`);
+}
+async function earlyWarningModal() {
+  openModal('Zam baskısı analizi','EPDK il bazlı fiyat servisi ve TCMB günlük gösterge kuru kontrol ediliyor…','<div class="empty-card"><p>Canlı resmi kaynak yanıtı bekleniyor. Veri alınamazsa puan uydurulmaz.</p></div>');
+  try {
+    const code = provinceCodes[state.location.city] || '34';
+    const response = await fetch(`/api/early-warning?province=${encodeURIComponent(code)}`, { cache:'no-store' });
+    const payload = await response.json();
+    const current = Number(payload.prices?.[state.fuelType]);
+    const historyKey = `${code}:${state.fuelType}`;
+    const previous = state.earlyWarningHistory?.[historyKey];
+    const risk = payload.ok && Number.isFinite(current) && Number.isFinite(Number(payload.usdTry)) ? riskScore(current, previous?.price, payload.usdTry, previous?.usdTry) : { level:'VERİ YOK', score:null, reason:'EPDK canlı fiyatı veya TCMB kuru alınamadı; kesin analiz üretilmedi.' };
+    if (payload.ok && Number.isFinite(current) && Number.isFinite(Number(payload.usdTry))) { state.earlyWarningHistory = { ...(state.earlyWarningHistory || {}), [historyKey]: { price:current, usdTry:Number(payload.usdTry), checkedAt:payload.checkedAt } }; }
+    earlyWarning = { ...payload, risk };
+    state.earlyWarning = earlyWarning;
+    save(state);
+    render();
+    earlyWarningResultModal(payload, risk, payload.ok ? '' : (payload.errors || []).join(' · ') || 'EPDK servisi yanıt vermedi.');
+  } catch (error) {
+    earlyWarning = { risk:{ level:'VERİ YOK', score:null, reason:'Erken uyarı servisine erişilemedi.' }, checkedAt:displayNow() };
+    state.earlyWarning = earlyWarning; save(state); render();
+    earlyWarningResultModal({ prices:{}, errors:[error.message] }, earlyWarning.risk, error.message);
+  }
+}
 function homeView() {
   const vehicle = state.vehicles.find(v => v.id === state.selectedVehicleId);
   const totalKm = state.trips.reduce((sum,t)=>sum + Number(t.km || 0),0).toFixed(1);
@@ -85,7 +131,7 @@ function homeView() {
   const priceText = hasLivePrice ? money(latestPrice.price) : '—';
   const priceCaption = hasLivePrice ? 'Canlı il fiyatı' : 'Canlı veri yok';
   const hasTrips = state.trips.length > 0;
-  return `<main><div class="hero-card"><div class="hero-top"><div><div class="hero-label">BUGÜNÜN YAKIT PLANI</div><div class="hero-number">${vehicle ? esc(vehicle.plate) : 'Araç ekle'}</div><div class="hero-sub">${vehicle ? `${esc(vehicle.brand)} ${esc(vehicle.model)} · ${esc(vehicle.fuel)}` : 'Masraf ve bakım takibine hemen başla.'}</div></div><div class="hero-side"><span>${ico('fuel',18)}</span><strong>${priceText}</strong><span>${priceCaption}</span></div></div><div class="progress"><span style="width:${vehicle ? '61':'0'}%"></span></div><div class="hero-sub" style="margin-top:8px">${vehicle ? `${vehicle.tank || 50} L depo · Tahmini ${Math.max(160, Math.round((vehicle.tank || 50) * 12.1))} km menzil` : 'Bir araç ekleyerek kişisel menzil hesabını aç.'}</div></div>${notificationPanel()}<section><div class="section-head"><h3>Hızlı İşlemler</h3><span class="muted" style="font-size:11px">Tek dokunuş</span></div><div class="quick-grid"><button class="quick-card" data-action="emergency"><i class="quick-icon">${ico('alert',19)}</i><b>Acil Konum</b><span>Konumu kaydet</span></button><button class="quick-card" data-action="park"><i class="quick-icon">${ico('park',20)}</i><b>Park Ettim</b><span>Yerini hatırla</span></button><button class="quick-card" data-action="accident"><i class="quick-icon">${ico('camera',20)}</i><b>Kaza & Belge</b><span>Hızlı kayıt</span></button></div></section><section><div class="section-head"><h3>Bugünkü Özet</h3><button class="text-button" data-view="journey">Yolculuklara git</button></div><div class="summary-strip"><div class="mini-stat"><div class="mini-label">${ico('route',14)} Son sürüş</div><strong>${hasTrips ? `${state.trips[0].km} km` : '—'}</strong><small>${hasTrips ? state.trips[0].title : 'Henüz sürüş kaydı yok'}</small></div><div class="mini-stat"><div class="mini-label">${ico('chart',14)} Toplam kayıtlı km</div><strong>${hasTrips ? `${totalKm} km` : '0 km'}</strong><small>${hasTrips ? 'Yerel kayıtlardan hesaplandı' : 'Sürüş başlatınca hesaplanır'}</small></div></div></section><section><div class="section-head"><h3>Son Hareketler</h3><button class="text-button" data-action="open-history">Geçmiş</button></div><div class="card list-card">${activityRows().slice(0,3).join('')}</div></section></main>`;
+  return `<main><div class="hero-card"><div class="hero-top"><div><div class="hero-label">BUGÜNÜN YAKIT PLANI</div><div class="hero-number">${vehicle ? esc(vehicle.plate) : 'Araç ekle'}</div><div class="hero-sub">${vehicle ? `${esc(vehicle.brand)} ${esc(vehicle.model)} · ${esc(vehicle.fuel)}` : 'Masraf ve bakım takibine hemen başla.'}</div></div><div class="hero-side"><span>${ico('fuel',18)}</span><strong>${priceText}</strong><span>${priceCaption}</span></div></div><div class="progress"><span style="width:${vehicle ? '61':'0'}%"></span></div><div class="hero-sub" style="margin-top:8px">${vehicle ? `${vehicle.tank || 50} L depo · Tahmini ${Math.max(160, Math.round((vehicle.tank || 50) * 12.1))} km menzil` : 'Bir araç ekleyerek kişisel menzil hesabını aç.'}</div></div>${notificationPanel()}${earlyWarningPanel()}<section><div class="section-head"><h3>Hızlı İşlemler</h3><span class="muted" style="font-size:11px">Tek dokunuş</span></div><div class="quick-grid"><button class="quick-card" data-action="emergency"><i class="quick-icon">${ico('alert',19)}</i><b>Acil Konum</b><span>Konumu kaydet</span></button><button class="quick-card" data-action="park"><i class="quick-icon">${ico('park',20)}</i><b>Park Ettim</b><span>Yerini hatırla</span></button><button class="quick-card" data-action="accident"><i class="quick-icon">${ico('camera',20)}</i><b>Kaza & Belge</b><span>Hızlı kayıt</span></button></div></section><section><div class="section-head"><h3>Bugünkü Özet</h3><button class="text-button" data-view="journey">Yolculuklara git</button></div><div class="summary-strip"><div class="mini-stat"><div class="mini-label">${ico('route',14)} Son sürüş</div><strong>${hasTrips ? `${state.trips[0].km} km` : '—'}</strong><small>${hasTrips ? state.trips[0].title : 'Henüz sürüş kaydı yok'}</small></div><div class="mini-stat"><div class="mini-label">${ico('chart',14)} Toplam kayıtlı km</div><strong>${hasTrips ? `${totalKm} km` : '0 km'}</strong><small>${hasTrips ? 'Yerel kayıtlardan hesaplandı' : 'Sürüş başlatınca hesaplanır'}</small></div></div></section><section><div class="section-head"><h3>Son Hareketler</h3><button class="text-button" data-action="open-history">Geçmiş</button></div><div class="card list-card">${activityRows().slice(0,3).join('')}</div></section></main>`;
 }
 function activityRows() {
   const items = [
@@ -114,7 +160,7 @@ function journeyView() {
 }
 function pricesView() {
   const current = state.fuelType;
-  const fallback = locationItems(state.location.city).map(item => ({ city:state.location.city, district:item.name, price:null, updatedAt:'Canlı veri alınamadı', live:false, sourceCount:0, cityReference:state.location.city !== 'İstanbul' }));
+  const fallback = locationItems(state.location.city).map(item => ({ city:state.location.city, district:item.name, price:null, updatedAt:'Canlı veri alınamadı', live:false, sourceCount:0, cityReference:false }));
   const all = priceRecords.length ? priceRecords : fallback;
   const records = state.pricesOnlyFavorites ? all.filter(p => state.favorites.includes(p.district)) : all;
   const meta = priceRecords.meta || { live:false, trusted:false, sourceCount:0, sources:[], authority:FUEL_SOURCES.epdk, note:'İlk canlı yenileme bekleniyor.' };
@@ -122,8 +168,9 @@ function pricesView() {
   const selectedSourceCount = selectedRecord?.sourceCount || 0;
   const sourceNames = selectedRecord?.source || (meta.sources || []).filter(source => source.ok).map(source => source.name).join(' · ');
   const headline = selectedSourceCount >= 2 ? `${selectedSourceCount} canlı kaynağın ortalaması` : selectedSourceCount === 1 ? 'Tek canlı kaynak okundu' : 'Canlı fiyat gösterilmiyor';
-  const scopeLabel = state.location.city === 'İstanbul' ? 'ilçe' : 'il';
-  return `<main><div class="view-heading"><div><div class="eyebrow"><i class="eyebrow-dot"></i>GÜNCEL FİYATLAR</div><h2>Fiyatlar</h2><p>Seçtiğiniz ${scopeLabel} için erişilebilen birinci taraf kaynakların ortalamasını izleyin.</p></div><button class="icon-button" data-action="refresh-prices" aria-label="Fiyatları yenile">${ico('refresh',19)}</button></div><button class="card location-card" data-action="location"><i class="location-pin">${ico('map',22)}</i><span><b>${esc(state.location.city)}</b><span>${esc(state.location.district)} ${state.location.city === 'İstanbul' ? 'seçili ilçe' : 'il geneli'}</span></span><i class="location-change">Değiştir</i></button><div class="pill-tabs fuel-tabs"><button class="${current==='benzin'?'active':''}" data-action="fuel" data-fuel="benzin">Benzin</button><button class="${current==='motorin'?'active':''}" data-action="fuel" data-fuel="motorin">Motorin</button><button class="${current==='lpg'?'active':''}" data-action="fuel" data-fuel="lpg">LPG</button></div><div class="source-bar"><span class="source-dot ${meta.trusted ? 'live':''}"></span><span><b>${headline}</b><small>${esc(sourceNames || 'Petrol Ofisi · Aytemiz · Sunpet')} · ${esc(meta.checkedAt ? `Kontrol: ${meta.checkedAt}` : 'yenilemek için tekrar deneyin')}</small></span><button class="text-button" data-action="fuel-source">Kaynaklar</button></div><div class="price-meta"><span>${records.length} ${scopeLabel} · ${esc(records[0]?.updatedAt || 'Güncelleme bekleniyor')}</span><button class="text-button" data-action="favorites-filter">${state.pricesOnlyFavorites ? 'Tümünü göster':'Favoriler'}</button></div><section class="card list-card">${records.length ? records.map(p => `<div class="price-row"><i class="row-icon">${ico('map',18)}</i><span class="price-place"><b>${esc(p.district)}</b><span>${esc(p.updatedAt || 'Kaynak bekleniyor')} · ${p.sourceCount > 1 ? `${p.sourceCount} kaynak ortalaması` : p.sourceCount === 1 ? 'tek kaynak' : 'veri yok'}${p.cityReference ? ' · il referansı':''}</span></span><span class="price-value">${p.price == null ? '—' : `${money(p.price)} <small>/L</small>`}</span><button class="star-button ${state.favorites.includes(p.district) ? 'active':''}" data-action="favorite" data-district="${esc(p.district)}" aria-label="Favori değiştir">${ico('star',20)}</button></div>`).join('') : `<div class="empty-card"><p>Favori kapsamı boş. Yıldızlara dokunarak ekleyin.</p></div>`}</section><p class="center muted" style="font-size:10px;line-height:1.45;margin:13px 10px">Fiyat; erişilebilen Petrol Ofisi, Aytemiz ve Sunpet sayfalarındaki aynı il/ilçe yakıt verilerinin basit ortalamasıdır. Kartta kaynak yayın tarihi bulunmuyorsa bu açıkça “Kaynak tarihi yayınlanmıyor” olarak yazılır; “Kontrol” zamanı uygulamanın veriyi çektiği andır. EPDK resmi otorite referansıdır. En az iki canlı kaynak yoksa ortalama etiketi kullanılmaz.</p></main>`;
+  const scopeLabel = state.location.city === 'İstanbul' ? 'ilçe' : 'il geneli';
+  const nearbyLabel = meta.nearby?.length ? ` · Çevre il referansı: ${meta.nearby.join(', ')}` : '';
+  return `<main><div class="view-heading"><div><div class="eyebrow"><i class="eyebrow-dot"></i>GÜNCEL FİYATLAR</div><h2>Fiyatlar</h2><p>Seçtiğiniz ${scopeLabel} için erişilebilen birinci taraf kaynakların ortalamasını izleyin.</p></div><button class="icon-button" data-action="refresh-prices" aria-label="Fiyatları yenile">${ico('refresh',19)}</button></div><button class="card location-card" data-action="location"><i class="location-pin">${ico('map',22)}</i><span><b>${esc(state.location.city)}</b><span>${esc(state.location.district)} ${state.location.city === 'İstanbul' ? 'seçili ilçe' : 'il geneli'}</span></span><i class="location-change">Değiştir</i></button><div class="pill-tabs fuel-tabs"><button class="${current==='benzin'?'active':''}" data-action="fuel" data-fuel="benzin">Benzin</button><button class="${current==='motorin'?'active':''}" data-action="fuel" data-fuel="motorin">Motorin</button><button class="${current==='lpg'?'active':''}" data-action="fuel" data-fuel="lpg">LPG</button></div><div class="source-bar"><span class="source-dot ${meta.trusted ? 'live':''}"></span><span><b>${headline}</b><small>${esc(sourceNames || 'Canlı kaynak yanıtı bekleniyor')}${esc(nearbyLabel)} · ${esc(meta.checkedAt ? `Kontrol: ${meta.checkedAt}` : 'yenilemek için tekrar deneyin')}</small></span><button class="text-button" data-action="fuel-source">Kaynaklar</button></div><div class="price-meta"><span>${records.length} ${scopeLabel} · ${esc(records[0]?.updatedAt || 'Güncelleme bekleniyor')}</span><button class="text-button" data-action="favorites-filter">${state.pricesOnlyFavorites ? 'Tümünü göster':'Favoriler'}</button></div><section class="card list-card">${records.length ? records.map(p => `<div class="price-row"><i class="row-icon">${ico('map',18)}</i><span class="price-place"><b>${esc(p.district)}</b><span>${esc(p.updatedAt || 'Kaynak bekleniyor')} · ${p.sourceCount > 1 ? `${p.sourceCount} kaynak ortalaması` : p.sourceCount === 1 ? 'tek kaynak' : 'veri yok'}${p.cityReference ? ` · çevre il referansı${p.referenceCity ? `: ${esc(p.referenceCity)}` : ''}` : ''}</span></span><span class="price-value">${p.price == null ? '—' : `${money(p.price)} <small>/L</small>`}</span><button class="star-button ${state.favorites.includes(p.district) ? 'active':''}" data-action="favorite" data-district="${esc(p.district)}" aria-label="Favori değiştir">${ico('star',20)}</button></div>`).join('') : `<div class="empty-card"><p>Favori kapsamı boş. Yıldızlara dokunarak ekleyin.</p></div>`}</section><p class="center muted" style="font-size:10px;line-height:1.45;margin:13px 10px">Fiyat; erişilebilen Petrol Ofisi, Aytemiz, Sunpet, M Oil ve Lukoil tablolarındaki aynı il/ilçe yakıt verilerinin basit ortalamasıdır. EPDK, fiili pompa fiyatı ve il raporları için resmi otorite referansıdır; tek bir ticari pompa fiyatını belirleyen kurum değildir. Her kartta kaynak tarihi ve uygulamanın kontrol zamanı ayrı gösterilir. En az iki canlı kaynak yoksa ortalama etiketi kullanılmaz. ${esc(meta.note || '')}</p></main>`;
 }
 function accountView() {
   const logged = state.user.loggedIn;
@@ -153,20 +200,106 @@ function reportModal() { const total=state.trips.reduce((s,t)=>s+Number(t.km||0)
 function badgesModal() { const badges=[['route','İlk rota',state.trips.length>0],['fuel','Bütçe gözü',state.receipts.length>0],['park','Park uzmanı',state.parks.length>0],['badge','100 km',state.trips.reduce((s,t)=>s+Number(t.km||0),0)>=100],['chart','Raporcu',state.trips.length>=3],['star','Favori avcısı',state.favorites.length>=5]]; openModal('Sürüş rozetleri','Rozetler yalnızca gerçek yerel kayıt koşulları sağlandığında açılır.',`<div class="badge-grid">${badges.map(([i,t,earned]) => `<div class="badge ${earned?'':'locked'}"><i class="badge-mark">${ico(i,19)}</i><b>${t}</b><span>${earned?'Açık':'Kilitli'}</span></div>`).join('')}</div>`); }
 function historyModal(kind) { const items = kind === 'parks' ? state.parks.map(p=>({icon:'park',color:'yellow',title:p.title,subtitle:`${p.date}${p.note?' · '+p.note:''}`,end:'Park'})) : state.trips.map(t=>({icon:'route',title:t.title,subtitle:`${t.date} · ${t.duration}${t.note?' · '+t.note:''}`,end:`${t.km} km`})); openModal(kind === 'parks'?'Geçmiş parklar':'Geçmiş sürüşler',items.length?'Yerel cihaz kayıtları.':'Henüz kayıt bulunmuyor.',`<div class="card list-card">${items.length?items.map(listRow).join(''):`<div class="empty-card"><p>Yeni bir kayıt oluşturduğunuzda burada görünür.</p></div>`}</div>`); }
 function documentsModal() { const accidents=state.accidents || []; const receipts=state.receipts || []; const content=[...accidents.map(item=>`<div class="document-row">${item.photo?.dataUrl ? `<img src="${item.photo.dataUrl}" alt="${esc(item.title)}" class="document-thumb">` : `<i class="row-icon">${ico('camera',19)}</i>`}<span><b>${esc(item.title)}</b><small>${esc(item.date)} · Kaza/belge${item.photo?.name ? ` · ${esc(item.photo.name)}` : ''}</small></span></div>`), ...receipts.map(item=>`<div class="document-row"><i class="row-icon">${ico('receipt',19)}</i><span><b>${esc(item.fuel || 'Yakıt fişi')} · ${item.amount ? money(item.amount) : 'Tutar okunamadı'}</b><small>${esc(item.date)}${item.plate ? ` · ${esc(item.plate)}` : ''}</small></span></div>`)].join(''); openModal('Yolculuk belgeleri','Kaza fotoğrafları ve OCR fiş kayıtları bu cihazda tutulur.',content || '<div class="empty-card"><p>Henüz belge veya fiş kaydı yok.</p></div>'); }
-function notificationSettingsModal() { openModal('Bildirimler','Yalnızca canlı kaynakta doğrulanan fiyat değişimleri bildirilir.',`<div class="switch-row"><i class="row-icon">${ico('bell',18)}</i><span class="switch-copy"><b>Doğrulanmış yakıt alarmı</b><span>Tahmin değil; iki canlı fiyat ölçümü karşılaştırılır.</span></span>${switchControl('notifications',state.settings.notifications)}</div><button class="secondary-button full-button" data-action="request-notification" style="margin-top:14px">Tarayıcı bildirim izni iste</button>`); }
-  function fuelSourceModal() { const liveMeta = priceRecords.meta?.sources || []; const sourceCards = Object.entries(FUEL_SOURCES).map(([id,source]) => { const status = liveMeta.find(item => item.id === id); const statusText = status?.ok ? `${status.dateLabel || 'Kaynak tarihi yayınlanmıyor'} · Kontrol: ${status.checkedAt || '—'}` : status?.error ? `Bu yenilemede okunamadı: ${status.error}` : id === 'epdk' || id === 'opet' ? 'Referans / adapter bağlantısı bu sürümde ortalamaya dahil değil' : 'Bu yenilemede okunmadı'; return `<div class="source-detail-row"><b>${esc(source.name)}</b><span>${esc(source.role)} · ${esc(statusText)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Siteyi aç</button></div>`; }).join(''); const alertCards = FUEL_ALERT_SOURCES.map(source => `<div class="source-detail-row"><b>${esc(source.name)} <span class="chip ${source.level === 'Resmi kurum' || source.level === 'Resmi kayıt' ? 'teal' : 'yellow'}">${esc(source.level)}</span></b><span>${esc(source.signal)} · ${esc(source.note)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Duyuruları aç</button></div>`).join(''); openModal('Yakıt kaynakları ve zam duyuruları','Güncel fiyat ile geleceğe yönelik sektör beklentisini birbirine karıştırmadan gösterir.',`<h4 class="modal-section-title">Güncel fiyat ortalaması</h4><div class="source-detail">${sourceCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">Fiyat kartı, erişilebilen Petrol Ofisi, Aytemiz ve Sunpet verilerinin aynı il/ilçe ve yakıt tipi için basit ortalamasıdır. Kaynak tarihi yoksa saklanmaz veya uydurulmaz; kontrol zamanı ayrıca gösterilir. En az iki kaynak yoksa ortalama etiketi kullanılmaz; EPDK resmi otorite referansıdır.</p><h4 class="modal-section-title">Zam/indirim duyuru kaynakları</h4><div class="source-detail">${alertCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">${esc(alertPolicy.rule)} Bu sürümde ileri tarihli haber taraması arka planda otomatik yapılmaz; kesin fiyat alarmı yalnızca Yenile ile alınan iki veya daha fazla canlı fiyat ortalamasındaki değişimden üretilir.</p>`); }
+function notificationSettingsModal() {
+  openModal('Bildirimler','Android 13+ için izin uygulama içindeki bu düğmeye dokununca istenir. Yalnızca canlı kaynakta doğrulanan fiyat değişimleri alarm üretir.',`<div class="switch-row"><i class="row-icon">${ico('bell',18)}</i><span class="switch-copy"><b>Doğrulanmış yakıt alarmı</b><span>Tahmin değil; iki veya daha fazla canlı kaynak ölçümü karşılaştırılır.</span></span>${switchControl('notifications',state.settings.notifications)}</div><button class="secondary-button full-button" data-action="request-notification" style="margin-top:14px">Android bildirim iznini aç</button><p class="muted" style="font-size:10px;line-height:1.45;margin-top:10px">İzin daha önce reddedildiyse Android Ayarlar &gt; Uygulamalar &gt; Yakıt Alarmı &gt; Bildirimler yolundan açın. Web önizlemesinde tarayıcı site izni kullanılır.</p>`);
+}
+function fuelSourceModal() {
+  const liveMeta = priceRecords.meta?.sources || [];
+  const sourceCards = Object.entries(FUEL_SOURCES).map(([id,source]) => {
+    const status = liveMeta.find(item => item.id === id);
+    const statusText = source.authority
+      ? (status?.error || 'EPDK resmi fiyat sayfası ve web servisleri; canlı SOAP sorgusu yetki gerektirebilir.')
+      : source.referenceOnly
+        ? 'Fiyat oluşumu açıklaması; bu sürümde ortalamaya dahil değildir.'
+        : status?.ok
+          ? `${status.dateLabel || 'Kaynak tarihi yayınlanmıyor'} · Kontrol: ${status.checkedAt || '—'}`
+          : status?.error ? `Bu yenilemede okunamadı: ${status.error}` : 'Bu yenilemede okunmadı';
+    return `<div class="source-detail-row"><b>${esc(source.name)}</b><span>${esc(source.role)} · ${esc(statusText)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Siteyi aç</button></div>`;
+  }).join('');
+  const alertCards = FUEL_ALERT_SOURCES.map(source => `<div class="source-detail-row"><b>${esc(source.name)} <span class="chip ${source.level === 'Resmi kurum' || source.level === 'Resmi kayıt' ? 'teal' : 'yellow'}">${esc(source.level)}</span></b><span>${esc(source.signal)} · ${esc(source.note)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Duyuruları aç</button></div>`).join('');
+  openModal('Yakıt kaynakları ve zam duyuruları','Güncel fiyat ile geleceğe yönelik sektör beklentisini birbirine karıştırmadan gösterir.',`<h4 class="modal-section-title">Güncel fiyat ortalaması</h4><div class="source-detail">${sourceCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">Güncel kart; aynı il/ilçe için erişilebilen beş birinci taraf dağıtıcı tablosundan (Petrol Ofisi, Aytemiz, Sunpet, M Oil, Lukoil) canlı değerleri ortalar. Kaynak tarihi yoksa uydurulmaz; kontrol zamanı ayrıca yazılır. EPDK resmi otorite ve fiili pompa fiyatı referansıdır. Seçili ilde doğrudan satır bulunamazsa en yakın il merkezlerinin canlı verisi açıkça “çevre il referansı” olarak etiketlenir.</p><h4 class="modal-section-title">Zam/indirim duyuru kaynakları</h4><div class="source-detail">${alertCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">${esc(alertPolicy.rule)} Bu sürümde ileri tarihli haber taraması arka planda otomatik yapılmaz; kesin fiyat alarmı yalnızca yenileme sırasında iki veya daha fazla canlı fiyat kaynağındaki ölçüm değişiminden üretilir.</p>`);
+}
 function receiptResultModal(result) { const p=result.parsed || {}; const saved = p.amount || p.liters || p.plate; if (saved) { state.receipts = state.receipts || []; state.receipts.unshift({ id:uid('receipt'), date:'Şimdi', amount:p.amount, liters:p.liters, fuel:p.fuel, plate:p.plate, rawText:p.rawText || '' }); save(state); } openModal('Fiş okuma',result.message || 'Fiş işlemi tamamlandı.',`<div class="receipt-result"><div class="receipt-status ${result.ocr ? 'ok':''}">${result.ocr ? 'Cihaz içi OCR tamamlandı':'Fotoğraf alındı'}</div><div class="receipt-grid"><div><small>Yakıt</small><b>${esc(p.fuel || 'Belirsiz')}</b></div><div><small>Tutar</small><b>${p.amount ? money(p.amount) : 'Okunamadı'}</b></div><div><small>Litre</small><b>${p.liters ? `${p.liters.toLocaleString('tr-TR')} L` : 'Okunamadı'}</b></div><div><small>Plaka</small><b>${esc(p.plate || 'Eşleşmedi')}</b></div></div>${p.rawText ? `<details><summary>Ham OCR metni</summary><pre>${esc(p.rawText)}</pre></details>`:''}<p class="muted" style="font-size:10px;line-height:1.45">${result.native ? 'Görüntü cihazdan dışarı çıkarılmadan Android ML Kit ile işlendi.' : 'Web önizlemesinde kamera dosyası alındı; gerçek cihaz içi OCR APK paketinde çalışır.'}</p></div><button class="primary-button full-button" data-action="close">Kapat</button>`); }
 function healthDetailModal() { const metricRows = obdMetrics.map(([key,label,unit]) => healthSnapshot[key] == null ? '' : `<div class="metric-row"><span>${label}</span><b>${Number(healthSnapshot[key]).toLocaleString('tr-TR',{maximumFractionDigits:1})} ${unit}</b></div>`).join(''); openModal('Araç sağlık analizi','OBD-II verilerinden açıklanabilir ön değerlendirme.',`<div class="health-summary"><div class="health-score large ${healthReport.score < 65 ? 'warn':''}"><strong>${healthReport.score}</strong><span>/100</span></div><div><b>${healthReport.level}</b><p>${healthReport.disclaimer}</p></div></div><div class="finding-list">${healthReport.findings.map(f=>`<div class="finding ${f.severity}"><b>${esc(f.title)}</b><span>${esc(f.detail)}</span></div>`).join('')}</div>${metricRows ? `<div class="metric-list">${metricRows}</div>`:''}<p class="muted" style="font-size:10px;line-height:1.45;margin-top:14px">${esc(obdSourceNote())}</p>`); }
 function obdModal(devices = []) { const list = devices.length ? devices.map(d=>`<button class="device-row" data-action="obd-connect" data-address="${esc(d.address || d.id)}" data-name="${esc(d.name || 'ELM327')}"><i class="row-icon">${ico('bluetooth',18)}</i><span><b>${esc(d.name || 'İsimsiz Bluetooth')}</b><small>${esc(d.address || d.id || '')}</small></span>${ico('chevron',16)}</button>`).join('') : `<div class="notice-card"><div class="notice-icon">${ico('bluetooth',20)}</div><div><strong>Adaptörü hazırla</strong><p>OBD-II portuna ELM327 takın. Android’de Bluetooth’u açıp taramayı başlatın.</p></div></div>`; openModal('OBD-II bağlantısı','BLE ve Bluetooth Classic ELM327 adaptörleri için bağlantı katmanı.',`<div class="obd-protocols"><span class="chip teal">PID 05–42</span><span class="chip yellow">ELM327</span><span class="chip teal">Yerel analiz</span></div><div class="card device-list">${list}</div><div class="sheet-actions"><button class="secondary-button" data-action="obd-demo">Demo ölçüm</button><button class="primary-button" data-action="obd-scan">Cihaz tara</button></div><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">Canlı bağlantı yalnızca native APK’da izin ve gerçek ELM327 adaptörüyle denenebilir. Web önizlemesi güvenli demo ölçümü kullanır.</p>`); }
 async function scanObd() { const result = await connectObdClassic(); if (!result.ok) { toast(result.message || 'OBD taraması başlatılamadı.', true); return; } obdModal(result.devices || []); toast(`${(result.devices || []).length} Bluetooth cihazı bulundu.`); }
 async function useObdDevice(target) { closeModal(); toast('OBD adaptöründen PID verileri okunuyor…'); const snapshot = await readObdSnapshot({ address:target.dataset.address, name:target.dataset.name }); healthSnapshot = snapshot; healthReport = analyzeVehicleHealth(snapshot); state.healthSnapshot = snapshot; state.healthReport = healthReport; state.obdDevice = { address:target.dataset.address, name:target.dataset.name }; save(state); render(); healthDetailModal(); }
 function useDemoHealth() { healthSnapshot = { ...demoObdSnapshot(), source:'Yerel OBD demo ölçümü' }; healthReport = analyzeVehicleHealth(healthSnapshot); state.healthSnapshot=healthSnapshot; state.healthReport=healthReport; save(state); closeModal(); render(); healthDetailModal(); toast('Demo sağlık ölçümü analiz edildi.'); }
-async function refreshPrices() { priceRecords = await getFuelPrices({ city:state.location.city, type:state.fuelType }); const selected = priceRecords.find(row => row.district === state.location.district) || priceRecords[0]; const trusted = selected?.sourceCount >= 2; const current=Number(selected?.price); const key=`${state.location.city}:${state.location.district}:${state.fuelType}`; const previousRaw=state.priceSnapshots?.[key]; const previous=Number(typeof previousRaw === 'object' ? previousRaw.price : previousRaw); if (trusted && Number.isFinite(current)) { if (Number.isFinite(previous) && Math.abs(current-previous) >= .01 && state.settings.notifications) { const direction=current>previous?'up':'down'; state.notifications.unshift({id:uid('price'),kind:direction,date:priceRecords.meta.checkedAt || displayNow(),seen:false,sourceName:(selected.source || '').replaceAll(' + ', ' + '),text:`${fuelLabels[state.fuelType]} ${state.location.city} / ${state.location.district} ortalaması ${Math.abs(current-previous).toFixed(2).replace('.',',')} ₺ ${current>previous?'arttı':'azaldı'}. Değişim ${selected.sourceCount} canlı kaynakta doğrulandı; kontrol: ${priceRecords.meta.checkedAt || displayNow()}.`}); state.notifications=state.notifications.slice(0,20); } state.priceSnapshots={...(state.priceSnapshots||{}),[key]:{price:current,checkedAt:priceRecords.meta.checkedAt || displayNow()}}; } save(state); render(); toast(trusted ? `Güncellendi · kontrol ${priceRecords.meta.checkedAt || displayNow()}` : priceRecords.meta?.live ? 'Seçili konumda tek canlı kaynak okundu; doğrulanmış alarm oluşturulmadı.' : 'Kaynak doğrulanamadı; bildirim oluşturulmadı.', !priceRecords.meta?.live); }
-async function recordPark() { const pos = state.gps ? await requestCurrentPosition() : { ok:false, message:'GPS kapalı' }; const item={id:uid('park'),title:'Mevcut park konumu',date:displayNow(),note:pos.ok?'GPS konumu doğrulandı':'GPS konumu alınamadı',latitude:pos.ok?pos.latitude:null,longitude:pos.ok?pos.longitude:null}; state.parks.unshift(item); persist(); toast(pos.ok ? 'Park konumu GPS ile kaydedildi.' : 'Park kaydı oluşturuldu; konum alınamadığı için koordinat eklenmedi.', !pos.ok); }
+async function refreshPrices() {
+  priceRecords = await getFuelPrices({ city:state.location.city, type:state.fuelType });
+  const selected = priceRecords.find(row => row.district === state.location.district) || priceRecords[0];
+  const trusted = selected?.sourceCount >= 2;
+  const current = Number(selected?.price);
+  const key = `${state.location.city}:${state.location.district}:${state.fuelType}`;
+  const previousRaw = state.priceSnapshots?.[key];
+  const previous = Number(typeof previousRaw === 'object' ? previousRaw.price : previousRaw);
+  let nativeNotification = null;
+  if (trusted && Number.isFinite(current)) {
+    if (Number.isFinite(previous) && Math.abs(current - previous) >= .01 && state.settings.notifications) {
+      const direction = current > previous ? 'up' : 'down';
+      const changeText = `${fuelLabels[state.fuelType]} ${state.location.city} / ${state.location.district} ortalaması ${Math.abs(current - previous).toFixed(2).replace('.',',')} ₺ ${current > previous ? 'arttı' : 'azaldı'}. Değişim ${selected.sourceCount} canlı kaynakta doğrulandı; kontrol: ${priceRecords.meta.checkedAt || displayNow()}.`;
+      state.notifications.unshift({ id:uid('price'), kind:direction, date:priceRecords.meta.checkedAt || displayNow(), seen:false, sourceName:selected.source, text:changeText });
+      state.notifications = state.notifications.slice(0,20);
+      nativeNotification = await scheduleFuelNotification({ title:`Yakıt ${current > previous ? 'artışı' : 'indirimi'} doğrulandı`, body:changeText });
+    }
+    state.priceSnapshots = { ...(state.priceSnapshots || {}), [key]: { price:current, checkedAt:priceRecords.meta.checkedAt || displayNow() } };
+  }
+  save(state);
+  render();
+  const baseMessage = trusted ? `Güncellendi · kontrol ${priceRecords.meta.checkedAt || displayNow()}` : priceRecords.meta?.live ? 'Seçili konumda tek canlı kaynak okundu; doğrulanmış alarm oluşturulmadı.' : 'Canlı kaynak doğrulanamadı; bildirim oluşturulmadı.';
+  toast(nativeNotification && !nativeNotification.ok ? `${baseMessage} Android bildirim izni kapalı.` : baseMessage, !priceRecords.meta?.live || Boolean(nativeNotification && !nativeNotification.ok));
+}
+async function recordPark() {
+  const item = { id:uid('park'), title:'Mevcut park konumu', date:displayNow(), note:state.gps ? 'GPS konumu aranıyor…' : 'GPS kapalı', latitude:null, longitude:null };
+  state.parks.unshift(item);
+  persist();
+  toast(state.gps ? 'Park kaydı oluşturuldu; konum aranıyor…' : 'Park kaydı oluşturuldu; GPS kapalı.', !state.gps);
+  if (!state.gps) return;
+  const pos = await requestCurrentPosition();
+  const saved = state.parks.find(park => park.id === item.id);
+  if (!saved) return;
+  saved.note = pos.ok ? 'GPS konumu doğrulandı' : 'GPS konumu alınamadı';
+  if (pos.ok) { saved.latitude = pos.latitude; saved.longitude = pos.longitude; }
+  persist();
+  toast(pos.ok ? 'Park konumu GPS ile güncellendi.' : 'Park kaydı duruyor; koordinat alınamadı.', !pos.ok);
+}
 async function emergency() { const pos = state.gps ? await requestCurrentPosition() : { ok:false, message:'GPS kapalı' }; const item={id:uid('emergency'),date:displayNow(),latitude:pos.ok?pos.latitude:null,longitude:pos.ok?pos.longitude:null,source:pos.ok?'GPS':'Konum alınamadı'}; state.emergencies.unshift(item); save(state); const text=pos.ok ? `Yakıt Alarmı acil konum: https://maps.google.com/?q=${pos.latitude},${pos.longitude}` : 'Yakıt Alarmı acil konum: GPS alınamadı.'; if (navigator.share && pos.ok) { try { await navigator.share({ title:'Acil konum', text }); } catch {} } render(); toast(pos.ok ? 'Acil konum kaydedildi; paylaşım ekranı açıldıysa gönderebilirsiniz.' : 'Acil kayıt kaydedildi ancak GPS kapalı/erişilemedi.', !pos.ok); }
 function updateTripPosition(position) { if (!state.activeTrip) return; const next={latitude:position.coords.latitude,longitude:position.coords.longitude}; const previous=state.activeTrip.lastPosition || state.activeTrip.startPosition; state.activeTrip.distanceKm=Number(state.activeTrip.distanceKm || 0) + haversineKm(previous,next); state.activeTrip.lastPosition=next; state.activeTrip.kmSource='GPS ölçümü'; const el=document.querySelector('#tripKm'); if (el) el.textContent=`GPS ile ölçülen mesafe: ${Number(state.activeTrip.distanceKm).toFixed(1)} km · ${state.activeTrip.kmSource}`; if (Date.now()-lastTripPersistAt > 10000) { lastTripPersistAt=Date.now(); save(state); } }
-async function startTrip() { const pos = state.gps ? await requestCurrentPosition() : { ok:false, message:'GPS kapalı' }; state.activeTrip = { id:uid('trip'), startedAt:Date.now(), type:'Kişisel', startPosition:pos.ok?{latitude:pos.latitude,longitude:pos.longitude}:null, lastPosition:pos.ok?{latitude:pos.latitude,longitude:pos.longitude}:null, distanceKm:0, kmSource:pos.ok?'GPS ölçümü başladı':'GPS izni yok' }; if (pos.ok && navigator.geolocation) tripWatchId=navigator.geolocation.watchPosition(updateTripPosition,()=>{}, { enableHighAccuracy:false, maximumAge:10000, timeout:10000 }); persist(); toast(pos.ok ? 'Sürüş başladı; GPS mesafesi ölçülüyor.' : 'Sürüş başladı; GPS izni yok, kilometre 0 tutulacak.', !pos.ok); tripClock(); }
-async function endTrip() { if (!state.activeTrip) return; const active=state.activeTrip; const pos = state.gps ? await requestCurrentPosition() : { ok:false }; if (pos.ok) updateTripPosition({coords:{latitude:pos.latitude,longitude:pos.longitude}}); if (tripWatchId != null && navigator.geolocation) navigator.geolocation.clearWatch(tripWatchId); tripWatchId=null; const elapsed=Math.max(1,Math.round((Date.now()-active.startedAt)/60000)); const km=Math.round(Number(active.distanceKm || 0) * 10) / 10; state.trips.unshift({id:active.id,title:'Manuel sürüş kaydı',date:displayNow(),km,duration:`${elapsed} dk`,type:active.type,note:active.note || '',active:false,kmSource:km>0?'GPS ölçümü':'GPS ölçümü yok'}); state.activeTrip=null; persist(); toast(km>0 ? `Sürüş tamamlandı · ${km.toFixed(1)} km GPS kaydı.` : 'Sürüş tamamlandı; GPS ölçümü olmadığı için 0 km kaydedildi.'); }
+async function startTrip() {
+  if (state.activeTrip) { toast('Zaten aktif bir sürüş var.', true); return; }
+  const id = uid('trip');
+  state.activeTrip = { id, startedAt:Date.now(), type:'Kişisel', startPosition:null, lastPosition:null, distanceKm:0, kmSource:state.gps ? 'GPS konumu aranıyor…' : 'GPS kapalı' };
+  persist();
+  toast(state.gps ? 'Sürüş başladı; GPS konumu aranıyor…' : 'Sürüş başladı; GPS kapalı, kilometre 0 tutulacak.', !state.gps);
+  tripClock();
+  if (!state.gps) return;
+  const pos = await requestCurrentPosition();
+  if (!state.activeTrip || state.activeTrip.id !== id) return;
+  if (pos.ok) {
+    state.activeTrip.startPosition = { latitude:pos.latitude, longitude:pos.longitude };
+    state.activeTrip.lastPosition = { latitude:pos.latitude, longitude:pos.longitude };
+    state.activeTrip.kmSource = 'GPS ölçümü başladı';
+    if (navigator.geolocation) tripWatchId = navigator.geolocation.watchPosition(updateTripPosition,()=>{}, { enableHighAccuracy:false, maximumAge:10000, timeout:10000 });
+    persist();
+    toast('GPS ölçümü başladı.');
+  } else {
+    state.activeTrip.kmSource = 'GPS izni yok';
+    persist();
+    toast('Sürüş kaydı açık; GPS izni yok, kilometre 0 tutulacak.', true);
+  }
+}
+async function endTrip() {
+  if (!state.activeTrip) { toast('Aktif sürüş bulunamadı.', true); return; }
+  const active = { ...state.activeTrip };
+  if (tripWatchId != null && navigator.geolocation) navigator.geolocation.clearWatch(tripWatchId);
+  tripWatchId = null;
+  const elapsed = Math.max(1, Math.round((Date.now() - active.startedAt) / 60000));
+  const km = Math.round(Number(active.distanceKm || 0) * 10) / 10;
+  state.trips.unshift({ id:active.id, title:'Manuel sürüş kaydı', date:displayNow(), km, duration:`${elapsed} dk`, type:active.type, note:active.note || '', active:false, kmSource:km>0?'GPS ölçümü':'GPS ölçümü yok' });
+  state.activeTrip = null;
+  persist();
+  toast(km > 0 ? `Sürüş tamamlandı · ${km.toFixed(1)} km GPS kaydı.` : 'Sürüş tamamlandı; GPS ölçümü olmadığı için 0 km kaydedildi.');
+}
 function tripClock() { const el=document.querySelector('#tripTimer'); if(!el || !state.activeTrip) return; const secs=Math.floor((Date.now()-state.activeTrip.startedAt)/1000); el.textContent=`${String(Math.floor(secs/60)).padStart(2,'0')}:${String(secs%60).padStart(2,'0')}`; setTimeout(tripClock,1000); }
 
 app.addEventListener('click', async event => {
@@ -177,6 +310,7 @@ app.addEventListener('click', async event => {
   else if (action === 'settings') settingsModal();
   else if (action === 'notif-tab') { state.notificationTab=target.dataset.tab; persist(); }
   else if (action === 'notifications') { openModal('Akaryakıt bildirimleri','Yalnızca canlı kaynak karşılaştırmaları burada görünür.',`<div class="card list-card">${state.notifications.length ? state.notifications.map(n=>listRow({icon:n.kind==='down'?'chart':'bell',title:n.kind==='down'?'Fiyat düşüşü doğrulandı':n.kind==='up'?'Fiyat artışı doğrulandı':'Fiyat güncellemesi',subtitle:n.text,end:n.date})).join('') : '<div class="empty-card"><p>Henüz canlı kaynakla doğrulanmış fiyat değişikliği yok.</p></div>'}</div>`); }
+  else if (action === 'early-warning') await earlyWarningModal();
   else if (action === 'fuel-alert-sources') fuelSourceModal();
   else if (action === 'emergency') emergency();
   else if (action === 'park') await recordPark();

@@ -46,3 +46,36 @@ Güncel fiyat tablosu ile “zam gelecek” bilgisi ayrı tutulur. Önceden duyu
 
 - **Capacitor Community Image To Text:** https://github.com/capacitor-community/image-to-text
   - Android’de cihaz içi ML Kit, kamera ile alınan yerel dosyayı metne dönüştürür.
+
+## Resmi fiyat otoritesi ve ek kaynaklar
+
+- **EPDK Akaryakıt Fiyatları:** https://www.epdk.gov.tr/Detay/Icerik/3-0-158/akaryak%C4%B1tfiyat
+  - EPDK aynı sayfada fiili pompa fiyatlarını, bayi tavan/tavsiye fiyatlarını, illere göre bayi fiyat raporunu ve petrol/LPG web servislerini listeler. EPDK sayfası, pompa fiyatlarının Bayi Otomasyon Sisteminden gelen fiili fiyatlar olduğunu; tavan/tavsiye raporlarının ise dağıtıcı bildirimlerine dayandığını açıkça ayırır.
+  - Açık XML servisinin WSDL’i: http://lisansws.epdk.gov.tr/services/bildirimPetrolAkaryakitFiyatlari?wsdl . Servis sorgu yetkisi istediği için uygulamanın ticari kaynakları tamamen EPDK verisiymiş gibi göstermemesi gerekir; EPDK uygulamada resmi otorite ve doğrulama referansı olarak gösterilir.
+- **EPDK Petrol ve LPG Piyasası Fiyatlandırma Raporu:** https://www.epdk.gov.tr/Detay/DownloadDocument?id=Y209o1bexzA=
+  - Rapor, benzin/motorin için CIF MED ürün fiyatı ve TCMB gösterge kuru ile hesaplanan ürün fiyatını; dağıtıcı/bayi marjlarını ve Hazine ve Maliye Bakanlığı tarafından belirlenen ÖTV/KDV’yi ayrı bileşenler olarak açıklar. LPG için Sonatrach propan/bütan referansı ayrıca belirtilir.
+- **Serbest fiyatlandırma açıklaması:** https://www.opet.com.tr/akaryakit-fiyatlari-nasil-olusur
+  - 1 Ocak 2005’ten beri serbest fiyatlandırma uygulanır. Dağıtıcı depo/tavsiye fiyatını, bayi ise rekabet ve bölgesel maliyetlere göre pompa fiyatını belirler. Bu nedenle Türkiye’de normal koşullarda bütün istasyonların tek bir fiyatını belirleyen tek kurum yoktur; EPDK düzenler, izler ve raporlar.
+- **M Oil canlı pompa fiyatları:** https://moil.com.tr/akaryakit-fiyatlari
+  - İlçe tablosu ve sayfa üzerinde fiyat tarihi bulunur; il seçiminde tüm iller listelenir.
+- **Lukoil Türkiye canlı pompa fiyatları:** https://www.lukoil.com.tr/akaryakit-fiyatlari
+  - İlçe tablosu, KDV dahil fiyat tarihi ve il seçimi bulunur.
+- **İl merkezi koordinatları:** https://gist.githubusercontent.com/abdullahoguk/ee03c26a23dca6eda9c480b4967e77b6/raw/il.json
+  - Çevre il fallback’i için yalnızca yaklaşık mesafe sıralaması üretmek üzere kullanılır; çevre il fiyatı seçili ilin kesin istasyon fiyatı olarak sunulmaz.
+
+## Gönderilen erken uyarı ZIP’i
+
+`akaryakit-erken-uyari-tum-iller.zip` içindeki model uygulamaya bağımlılıksız `services/early-warning.js` olarak aktarıldı. ZIP’teki 81 il trafik kodları `data/early-warning-provinces.json` ve `data/province-codes.js` içinde korunur.
+
+- **EPDK il bazlı akaryakıt servisi:** `sorguNo=72` ve il trafik kodu ile çağrılır.
+- **EPDK LPG servisi:** Aynı il kodu üzerinden ayrı ölçüm olarak çağrılır.
+- **TCMB günlük kur XML’i:** USD satış değeri için kullanılır.
+- **Risk formülü:** ZIP’teki yaklaşım korunur: pozitif USD değişimi %55, pozitif yakıt değişimi %45 ağırlıkla birleştirilir; en az iki tarihli ölçüm yoksa `VERİ YOK` gösterilir.
+- **Güvenlik sınırı:** Bu skor kesin zam tahmini değildir. EPDK servisi erişilemezse uygulama puan veya fiyat uydurmaz; hata ve son kontrol zamanı kullanıcıya gösterilir. Mevcut pompa fiyat kartları ise ayrı çoklu dağıtıcı adapterından beslenir.
+
+## Android bildirim izni
+
+- **Android resmi bildirim izni:** https://developer.android.com/develop/ui/views/notifications/notification-permission
+  - Android 13 (API 33)+ için `POST_NOTIFICATIONS` manifest bildirimi ve kullanıcı etkileşimiyle runtime izin isteği gerekir. Yeni kurulumda izin verilene kadar bildirimler kapalıdır.
+- **Capacitor Local Notifications:** https://capacitorjs.com/docs/apis/local-notifications
+  - Android’de `checkPermissions()` ve `requestPermissions()` çağrıları gerekir; yerel bildirimler `schedule()` ile oluşturulur. Uygulama artık web Notification API’si yoksa native Capacitor adapterını kullanır.
