@@ -2,7 +2,7 @@
   "name": "yakit-alarmi",
   "version": "0.1.0",
   "private": true,
-  "description": "Yakıt Alarmı vanilla web ve Capacitor Android test paketi",
+  "description": "Sürüş Cepte vanilla web ve Capacitor Android sürücü yardımcısı",
   "type": "module",
   "scripts": {
     "dev": "node server.mjs",

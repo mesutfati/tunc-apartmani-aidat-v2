@@ -7,7 +7,7 @@ export async function requestCurrentPosition() {
       const permission = await native.checkPermissions();
       if (permission.location !== 'granted') {
         const requested = await native.requestPermissions();
-        if (requested.location !== 'granted') return { ok:false, message:'Android konum izni kapalı. Ayarlar > Uygulamalar > Yakıt Alarmı > İzinler > Konum yolundan izin verin.' };
+        if (requested.location !== 'granted') return { ok:false, message:'Android konum izni kapalı. Ayarlar > Uygulamalar > Sürüş Cepte > İzinler > Konum yolundan izin verin.' };
       }
       const result = await native.getCurrentPosition({ enableHighAccuracy:true, timeout:12000, maximumAge:0 });
       return { ok:true, latitude:result.coords.latitude, longitude:result.coords.longitude, accuracy:result.coords.accuracy ?? null, capturedAt:new Date(result.timestamp || Date.now()).toISOString() };

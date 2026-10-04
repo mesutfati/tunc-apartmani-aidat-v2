@@ -12,3 +12,10 @@
 - Yalnızca OPET, Shell, Petrol Ofisi, BP, TotalEnergies, MOİL, Aytemiz ve Sunpet gibi tanınan marka adları listelenir; sonuçlar GPS mesafesine göre en yakından uzağa sıralanır.
 - İstasyonların şubeye özel pompa fiyatı bu kaynakta güvenilir biçimde bulunmadığı için karttaki fiyat, seçili ilçe için canlı kaynakların doğrulanmış litre ortalaması olarak açıkça etiketlenir; şube fiyatı gibi sunulmaz.
 - Yol tarifi, koordinatlı park kaydında Android `geo:` URI’siyle; webde Google Maps arama bağlantısıyla açılır.
+
+## Sürücü güvenliği ve hatırlatıcılar
+
+- İnternet yokken Acil Durum Merkezi, kaza tutanağı, GPS kaydı ve fotoğraflar cihazda localStorage içinde tutulur; paylaşım bağlantısı bağlantı geri geldiğinde kullanılabilir.
+- Fiyat ekranı kontrol zamanını güncel/uyarı/eski olarak etiketler; fiyat kaynağının yayın tarihi yoksa tarih uydurulmaz.
+- Sigorta poliçesi bitişi ve tarihli bakım kayıtları Android yerel bildirim kanalında planlanır. Kilometre bazlı bakım ayrıca uygulama açıldığında gerçek kilometreyle kontrol edilir.
+- Uygulama kapalıyken canlı fiyat değişikliği taraması, ayrı bir sunucu/WorkManager görevi gerektirir; bu paket fiyatı kendiliğinden uydurmaz ve yalnızca canlı yenilemede doğrulanmış alarm üretir.
