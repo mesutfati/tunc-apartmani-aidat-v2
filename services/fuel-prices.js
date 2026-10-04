@@ -1,4 +1,4 @@
-import { districts } from '../data/fixtures.js';
+import { districts, provinces } from '../data/fixtures.js';
 
 export const FUEL_SOURCES = {
   epdk: {
@@ -30,9 +30,7 @@ export const FUEL_SOURCES = {
 };
 
 const ANADOLU = new Set(['Adalar','Ataşehir','Beykoz','Çekmeköy','Kadıköy','Kartal','Maltepe','Pendik','Sancaktepe','Sultanbeyli','Şile','Tuzla','Ümraniye','Üsküdar']);
-const cityAliases = { İstanbul:'istanbul', Ankara:'ankara', İzmir:'izmir', Bursa:'bursa', Antalya:'antalya', Adana:'adana', Mersin:'mersin', Kocaeli:'kocaeli' };
-const cityNames = ['ISTANBUL','ANKARA','IZMIR','ADANA','BURSA','KOCAELI','ANTALYA','MERSIN','KONYA','GAZIANTEP','SAMSUN','TRABZON','SAKARYA','ESKISEHIR','KAYSERI','BALIKESIR','DENIZLI','HATAY','MANISA','MUGLA','AYDIN','TEKIRDAG','EDIRNE','CANAKKALE','BOLU','DIYARBAKIR','ERZURUM','MALATYA','VAN'];
-const slug = value => (cityAliases[value] || String(value || 'istanbul')).toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ı/g, 'i').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slug = value => String(value || 'istanbul').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[çğıöşü]/g, letter => ({ç:'c',ğ:'g',ı:'i',ö:'o',ş:'s',ü:'u'}[letter] || letter)).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const normalize = value => String(value || '').toLocaleUpperCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/İ/g, 'I').replace(/[^A-Z0-9()\/ ]/g, ' ').replace(/\s+/g, ' ').trim();
 const numberPattern = /\b(\d{1,3})[.,](\d{2})\b/g;
 const numberList = value => [...String(value || '').matchAll(numberPattern)].map(match => Number(`${match[1]}.${match[2]}`));
@@ -62,9 +60,22 @@ function regionFor(city, district) {
   if (normalize(city) !== 'ISTANBUL') return canonicalKey(city);
   return canonicalKey(`İstanbul (${ANADOLU.has(district) ? 'Anadolu' : 'Avrupa'})`);
 }
+function formatDateTime(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString('tr-TR', { dateStyle:'short', timeStyle:'short', timeZone:'Europe/Istanbul' });
+}
 function sourceDate(html) {
-  const match = String(html).match(/(?:Son Güncelleme(?: Tarihi)?|Güncelleme Tarihi|last-update-time)[^\d]*(\d{2}\.\d{2}\.\d{4}(?:\s+\d{2}:\d{2})?)/i);
+  const match = String(html).match(/(?:Son Güncelleme(?: Tarihi)?|Güncelleme Tarihi|Tarihi\s*:|last-update-time)[^\d]*(\d{1,2}[./-]\d{1,2}[./-]\d{4}(?:\s+\d{1,2}:\d{2})?)/i);
   return match?.[1] || null;
+}
+function sourceInfo(resource) {
+  const published = sourceDate(resource.text);
+  const lastModified = resource.lastModified ? formatDateTime(resource.lastModified) : null;
+  return {
+    sourceDate: published || null,
+    checkedAt: resource.checkedAt,
+    dateLabel: published ? `Kaynak tarihi: ${published}` : lastModified ? `HTTP son değişiklik: ${lastModified}` : 'Kaynak tarihi yayınlanmıyor',
+  };
 }
 function tableRows(html) {
   const rows = [];
@@ -105,13 +116,13 @@ function parsePetrolOfisi(html) {
   }
   return prices;
 }
-async function fetchText(url) {
+async function fetchResource(url) {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), 18000) : null;
   try {
     const response = await fetch(url, { cache: 'no-store', signal: controller?.signal });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    return await response.text();
+    return { text: await response.text(), lastModified: response.headers.get('last-modified'), checkedAt: formatDateTime() };
   } finally {
     if (timer) clearTimeout(timer);
   }
@@ -129,9 +140,9 @@ function sunpetUrls(city) {
 }
 async function loadProviders(city) {
   const jobs = [
-    { id: 'petrolOfisi', source: FUEL_SOURCES.petrolOfisi, run: async () => { const html = await fetchText(FUEL_SOURCES.petrolOfisi.url); return { prices: parsePetrolOfisi(html), updatedAt: sourceDate(html), url: FUEL_SOURCES.petrolOfisi.url }; } },
-    { id: 'aytemiz', source: FUEL_SOURCES.aytemiz, run: async () => { const [baseResult, lpgResult] = await Promise.allSettled([fetchText(cityUrl(city, 'base', 'aytemiz')), fetchText(cityUrl(city, 'lpg', 'aytemiz'))]); const baseHtml = baseResult.status === 'fulfilled' ? baseResult.value : ''; const lpgHtml = lpgResult.status === 'fulfilled' ? lpgResult.value : ''; const prices = parseAytemiz(baseHtml, 'base'); Object.assign(prices, mergeMaps(prices, parseAytemiz(lpgHtml, 'lpg'))); if (!Object.keys(prices).length) throw new Error('Aytemiz tablosu okunamadı'); return { prices, updatedAt: sourceDate(baseHtml) || sourceDate(lpgHtml), url: FUEL_SOURCES.aytemiz.url }; } },
-    { id: 'sunpet', source: FUEL_SOURCES.sunpet, run: async () => { const responses = await Promise.all(sunpetUrls(city).map(async url => ({ url, html: await fetchText(url) }))); const prices = responses.reduce((all, item) => mergeMaps(all, parseSunpet(item.html)), {}); const updatedAt = responses.map(item => sourceDate(item.html)).filter(Boolean).sort().at(-1) || null; if (!Object.keys(prices).length) throw new Error('Sunpet tablosu okunamadı'); return { prices, updatedAt, url: responses[0].url }; } },
+    { id: 'petrolOfisi', source: FUEL_SOURCES.petrolOfisi, run: async () => { const page = await fetchResource(FUEL_SOURCES.petrolOfisi.url); return { prices: parsePetrolOfisi(page.text), ...sourceInfo(page), url: FUEL_SOURCES.petrolOfisi.url }; } },
+    { id: 'aytemiz', source: FUEL_SOURCES.aytemiz, run: async () => { const [baseResult, lpgResult] = await Promise.allSettled([fetchResource(cityUrl(city, 'base', 'aytemiz')), fetchResource(cityUrl(city, 'lpg', 'aytemiz'))]); const basePage = baseResult.status === 'fulfilled' ? baseResult.value : null; const lpgPage = lpgResult.status === 'fulfilled' ? lpgResult.value : null; const prices = parseAytemiz(basePage?.text || '', 'base'); Object.assign(prices, mergeMaps(prices, parseAytemiz(lpgPage?.text || '', 'lpg'))); if (!Object.keys(prices).length) throw new Error('Aytemiz tablosu okunamadı'); const info = sourceInfo(basePage || lpgPage); if (!info.sourceDate && lpgPage) Object.assign(info, sourceInfo(lpgPage)); return { prices, ...info, url: FUEL_SOURCES.aytemiz.url }; } },
+    { id: 'sunpet', source: FUEL_SOURCES.sunpet, run: async () => { const responses = await Promise.all(sunpetUrls(city).map(async url => ({ url, page: await fetchResource(url) }))); const prices = responses.reduce((all, item) => mergeMaps(all, parseSunpet(item.page.text)), {}); if (!Object.keys(prices).length) throw new Error('Sunpet tablosu okunamadı'); const info = sourceInfo(responses[0].page); const dated = responses.map(item => sourceInfo(item.page)).find(item => item.sourceDate); if (!info.sourceDate && dated) Object.assign(info, dated); return { prices, ...info, url: responses[0].url }; } },
   ];
   const settled = await Promise.all(jobs.map(async job => { try { return { ...job, result: await job.run(), ok: true }; } catch (error) { return { ...job, ok: false, error: error instanceof Error ? error.message : String(error) }; } }));
   return settled;
@@ -153,13 +164,16 @@ function formatFetchedAt() {
   return new Date().toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' });
 }
 function rowsFromProviders({ city, type, providers }) {
-  const rows = districts.map(item => {
+  const locationItems = city === 'İstanbul' ? districts : [{ name:city }];
+  const rows = locationItems.map(item => {
     const sourceValues = providers.filter(provider => provider.ok).map(provider => {
       const price = resolveSourcePrice(provider, item.name, city, type);
-      return price == null ? null : { id: provider.id, name: provider.source.name, price, url: provider.result.url, updatedAt: provider.result.updatedAt || null };
+      return price == null ? null : { id: provider.id, name: provider.source.name, price, url: provider.result.url, sourceDate: provider.result.sourceDate || null, dateLabel: provider.result.dateLabel || 'Kaynak tarihi yayınlanmıyor', checkedAt: provider.result.checkedAt || null };
     }).filter(Boolean);
     const price = sourceValues.length ? round(sourceValues.reduce((sum, record) => sum + record.price, 0) / sourceValues.length) : null;
-    const updatedAt = sourceValues.map(record => record.updatedAt).filter(Boolean).sort().at(-1) || (sourceValues.length ? formatFetchedAt() : 'Canlı veri alınamadı');
+    const dateLabels = [...new Set(sourceValues.map(record => record.dateLabel).filter(Boolean))];
+    const checkedAt = sourceValues.map(record => record.checkedAt).filter(Boolean).sort().at(-1);
+    const updatedAt = sourceValues.length ? `${dateLabels.join(' · ')}${checkedAt ? ` · Kontrol: ${checkedAt}` : ''}` : 'Canlı veri alınamadı';
     return { city, district: item.name, price, updatedAt, source: sourceValues.map(record => record.name).join(' + ') || 'Gösterim yok', sourceCount: sourceValues.length, sourceValues, live: price != null, trusted: sourceValues.length >= 2, cityReference: sourceValues.some(record => record.id === 'petrolOfisi'), sourceUrl: sourceValues[0]?.url || FUEL_SOURCES.epdk.url, type };
   });
   return rows;
@@ -167,7 +181,7 @@ function rowsFromProviders({ city, type, providers }) {
 async function directPrices({ city, type }) {
   const providers = await loadProviders(city);
   const rows = rowsFromProviders({ city, type, providers });
-  const sourceSummary = providers.map(provider => ({ id: provider.id, name: provider.source.name, url: provider.result?.url || provider.source.url, ok: provider.ok, updatedAt: provider.result?.updatedAt || null, error: provider.error || null }));
+  const sourceSummary = providers.map(provider => ({ id: provider.id, name: provider.source.name, url: provider.result?.url || provider.source.url, ok: provider.ok, sourceDate: provider.result?.sourceDate || null, dateLabel: provider.result?.dateLabel || (provider.ok ? 'Kaynak tarihi yayınlanmıyor' : null), checkedAt: provider.result?.checkedAt || null, error: provider.error || null }));
   const maxSources = Math.max(0, ...rows.map(row => row.sourceCount));
   rows.meta = {
     live: rows.some(row => row.live),
@@ -176,7 +190,7 @@ async function directPrices({ city, type }) {
     average: maxSources >= 2,
     sources: sourceSummary,
     authority: FUEL_SOURCES.epdk,
-    checkedAt: new Date().toISOString(),
+    checkedAt: formatDateTime(),
     note: maxSources >= 2 ? `Aynı ilçe/il referansına ait ${maxSources} birinci taraf dağıtıcı verisinin basit aritmetik ortalaması gösteriliyor.` : maxSources === 1 ? 'Yalnızca tek canlı kaynak okunabildi; ortalama iddiası yapılmıyor.' : 'Kaynaklara erişilemediği için sahte veya eski rakam gösterilmiyor.',
   };
   return rows;

@@ -32,6 +32,8 @@ Güncel fiyat tablosu ile “zam gelecek” bilgisi ayrı tutulur. Önceden duyu
 - EPDK veya Resmî Gazete tarafından doğrulanmayan bir haber “kesinleşti” şeklinde bildirilmez.
 - Güncel fiyat değişikliği bildirimi yalnızca aynı ürün/il için iki ayrı canlı dağıtıcı kaynağında ortalama değişimi görüldüğünde oluşturulur.
 - Kaynak erişilemezse uygulama rakam uydurmaz ve bildirim üretmez.
+- Her kartta sağlayıcının yayınladığı tarih ayrı, uygulamanın yaptığı son kontrol zamanı ayrı gösterilir; sağlayıcı tarih yayınlamıyorsa bu alan açıkça belirtilir.
+- APK sürümünde kullanıcı Fiyatlar ekranındaki **Yenile** düğmesine bastığında kontrol yapılır. Arka planda sürekli web taraması ve ileri tarihli zam tahmini bu ilk teslimde yapılmaz; bu sınır arayüzde de açıklanır.
 
 ## OBD-II
 
