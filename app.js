@@ -45,7 +45,7 @@ function toast(message, warn = false) {
   setTimeout(() => node.remove(), 3600);
 }
 function header() {
-  return `<header class="topbar"><div class="brand"><span class="brand-mark brand-car">${corollaIcon(38)}</span><h1>Yakıt Alarmı</h1></div><div class="top-actions"><button class="gps-pill ${state.gps ? '' : 'off'}" data-action="toggle-gps" aria-label="GPS durumunu değiştir"><i class="gps-dot"></i>GPS</button><button class="icon-button" data-action="settings" aria-label="Ayarlar">${ico('settings',20)}</button></div></header>`;
+  return `<header class="topbar"><div class="brand"><span class="brand-mark brand-car brand-photo"><img src="assets/corolla-logo.png" alt="Toyota Corolla" /></span><h1>Yakıt Alarmı</h1></div><div class="top-actions"><button class="gps-pill ${state.gps ? '' : 'off'}" data-action="toggle-gps" aria-label="GPS durumunu değiştir"><i class="gps-dot"></i>GPS</button><button class="icon-button" data-action="settings" aria-label="Ayarlar">${ico('settings',20)}</button></div></header>`;
 }
 function nav() {
   const items = [['home','Ana Sayfa','home'],['vehicles','Araçlar','car'],['journey','Yolculuk','map'],['prices','Fiyatlar','chart'],['account','Hesap','user']];
