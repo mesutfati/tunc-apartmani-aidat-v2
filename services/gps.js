@@ -1,4 +1,5 @@
 function nativeGeolocation() { return globalThis.Capacitor?.Plugins?.Geolocation || null; }
+function nativeVision() { return globalThis.Capacitor?.Plugins?.Vision || null; }
 
 function permissionStatus(value) {
   if (value === 'granted') return 'granted';
@@ -48,6 +49,16 @@ export async function requestCurrentPosition() {
     error => resolve({ ok:false, permission:error?.code === 1 ? 'denied' : 'granted', status:error?.code === 1 ? 'denied' : 'service-off', serviceEnabled:false, message:error?.code === 1 ? 'Konum izni verilmedi.' : 'Konum izni verilmiş olsa da cihaz konum servisi kapalı veya konum alınamadı.' }),
     { enableHighAccuracy:true, timeout:12000, maximumAge:0 }
   ));
+}
+
+export async function openLocationSettings(target = 'app') {
+  const vision = nativeVision();
+  const method = target === 'device' ? vision?.openLocationServices : vision?.openAppSettings;
+  if (method) {
+    try { await method(); return { ok:true, native:true, target }; }
+    catch (error) { return { ok:false, native:true, message:error?.message || 'Android uygulama ayarları açılamadı.' }; }
+  }
+  return { ok:false, native:false, message:'Web önizlemesinde uygulama ayarları otomatik açılamaz. Tarayıcı adres çubuğundaki site izinlerinden konuma izin verin.' };
 }
 
 // Android güvenlik modeli nedeniyle konum servisi gizlice ve sürekli açılamaz.

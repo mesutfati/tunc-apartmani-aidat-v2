@@ -11,6 +11,7 @@ function removeSeedRecords(state) {
     result.healthSnapshot = null;
     result.healthReport = null;
   }
+  if (result.user?.provider === 'google-demo' || result.user?.email === 'demo@yakitalarmi.app') result.user = { loggedIn:false, name:'', email:'' };
   return result;
 }
 

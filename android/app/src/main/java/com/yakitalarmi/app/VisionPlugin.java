@@ -9,6 +9,8 @@ import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.net.Uri;
 import android.app.Activity;
+import android.content.Intent;
+import android.provider.Settings;
 
 import androidx.activity.result.ActivityResult;
 import androidx.activity.result.ActivityResultLauncher;
@@ -83,6 +85,37 @@ public class VisionPlugin extends Plugin {
         response.put("pageCount", imageUris.length());
         response.put("scanMode", "document");
         call.resolve(response);
+    }
+
+    @PluginMethod
+    public void openAppSettings(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            intent.setData(Uri.parse("package:" + getContext().getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject response = new JSObject();
+            response.put("ok", true);
+            response.put("target", "application-details-settings");
+            call.resolve(response);
+        } catch (RuntimeException error) {
+            call.reject("Uygulama ayarları açılamadı: " + safeMessage(error), error);
+        }
+    }
+
+    @PluginMethod
+    public void openLocationServices(PluginCall call) {
+        try {
+            Intent intent = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            getContext().startActivity(intent);
+            JSObject response = new JSObject();
+            response.put("ok", true);
+            response.put("target", "location-source-settings");
+            call.resolve(response);
+        } catch (RuntimeException error) {
+            call.reject("Cihaz konum ayarları açılamadı: " + safeMessage(error), error);
+        }
     }
 
     @PluginMethod

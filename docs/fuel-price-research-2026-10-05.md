@@ -78,3 +78,14 @@ NSoft, birinci taraf dağıtıcı kaynağı olarak etiketlenmiyor; APK’de kull
 Ekran görüntüsündeki iddia açık web kaynaklarıyla çapraz kontrol edildi. Ekonomim, 03.10.2026 tarihli haberinde sektör kaynaklarına dayanarak 6 Ekim 2026’dan itibaren motorine 4,95 TL indirim beklendiğini yazıyor: https://www.ekonomim.com/ekonomi/tabela-yine-degisecek-motorine-bir-indirim-daha-geliyor-haberi-922304 . CNN Türk, 04.10.2026 tarihli haberinde aynı ürün, tutar ve tarihi “sektör kaynaklarına göre” aktarıyor: https://www.cnnturk.com/ekonomi/motorine-indirim-geldi-4-ekim-akaryakit-fiyatlari-guncellendi-iste-benzin-motorin-mazot-lpg-akaryakit-fiyatlarinda-son-durum-3474614 . Diken, 05.10.2026 tarihli yazısında beklentiyi Ekonomim haberine bağlayarak aktarıyor: https://www.diken.com.tr/motorine-indirim-bekleniyor-guncel-akaryakit-fiyatlari-6/ .
 
 PÜİS’in herkese açık duyuru listesinde bu kontrol sırasında aynı 4,95 TL tutarıyla eşleşen bir duyuru bulunmadı: https://www.puis.org.tr/tum-haberler . EPDK resmi sayfası fiili bayi otomasyon pompa fiyatlarını ve resmi raporları sağlar, ancak bu gelecek fiyat beklentisinin kaynağı değildir: https://www.epdk.gov.tr/Detay/Icerik/3-0-158/akaryak%C4%B1tfiyat . Bu nedenle uygulama iddiayı “kesin indirim” değil, **Orta güvenli sektör beklentisi** olarak göstermelidir. Güven; açık ürün+tutar+yürürlük tarihi, yayıncı sayısı, kaynak katmanı ve resmi teyit bulunmasıyla hesaplanır. Aynı sektör haberinin farklı sitelerde tekrarlanması bağımsız resmi doğrulama sayılmaz; kartta ortak sektör kaynağının resmî olarak yayımlanmadığı belirtilir.
+
+
+## Araç profili kaynakları (5 Ekim 2026)
+
+Dolum hesabındaki hazır profiller yalnızca doğrulanabilir Toyota Türkiye teknik verileriyle sınırlı tutuldu:
+
+- Corolla Sedan resmi özellikler: https://www.toyota.com.tr/araba-modelleri/corolla-sedan/ozellikler — 1.5L benzinli konfigürasyonda 50 L depo ve WLTP birleşik 6,1 L/100 km gösteriliyor.
+- Corolla teknik/donanım PDF: https://www.toyota.com.tr/content/dam/toyota/nmsc/turkey/cars/e-brosur/corolla/Corolla-Teknik-ve-Donanim-Ozellikleri-01-2026.pdf — 1.5L benzinli 50 L, 1.8L Hybrid 43 L depo; WLTP aralıkları sırasıyla 6,1–6,3 ve 4,5–4,7 L/100 km.
+- Corolla Cross Hybrid teknik/donanım PDF: https://www.toyota.com.tr/content/dam/toyota/nmsc/turkey/cars/e-brosur/corolla-cross/TOYOTA_CorollaCross_TeknikDonanim_2026_HR-1.pdf — 1.8L Hybrid, 36 L depo ve WLTP 5,0–5,1 L/100 km.
+
+Uygulama model profilini otomatik doldurur ancak model yılı, motor, donanım veya pazar farklılıkları olabileceği için alanlar düzenlenebilir bırakılır. Tahmini menzil yalnızca üretici WLTP değeriyle matematiksel gösterge olarak hesaplanır; gerçek tüketim ve gösterge seviyesi yerine geçmez.

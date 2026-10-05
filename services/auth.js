@@ -1,5 +1,5 @@
-export async function demoGoogleSignIn() {
-  await new Promise(r => setTimeout(r, 450));
-  return { name:'Demo Sürücü', email:'demo@yakitalarmi.app', provider:'google-demo' };
+// Google OAuth için gerekli istemci kimliği ve doğrulama sunucusu bu projeye bağlanmadı.
+// UI'da sahte oturum gösterilmez; bu modül bilinçli olarak kullanıcı/session oluşturmaz.
+export async function googleSignInUnavailable() {
+  return { ok:false, message:'Google girişi yapılandırılmadı; sahte kullanıcı oluşturulmadı.' };
 }
-// Gerçek OAuth sağlayıcısı ve Capacitor Browser callback akışı sonraki aşamada bağlanacak.
