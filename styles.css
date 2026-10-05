@@ -51,7 +51,11 @@ main { padding:20px 18px 18px; }
 .notice-card { margin-top:11px; padding:14px; border-radius:18px; background:linear-gradient(130deg,rgba(19,98,89,.78),rgba(16,69,69,.75)); border:1px solid rgba(64,219,201,.2); display:flex; gap:12px; }
 .notice-card .notice-icon { flex:0 0 auto; height:39px; width:39px; display:grid; place-items:center; border-radius:13px; background:rgba(12,33,47,.35); color:var(--teal); }
 .notice-card strong { display:block; font-size:13px; margin:1px 0 4px; }
-.notice-card p { margin:0; color:#d8eff0; font-size:12px; line-height:1.45; }
+	.notice-card p { margin:0; color:#d8eff0; font-size:12px; line-height:1.45; }
+	.location-notice { align-items:center; flex-wrap:wrap; }
+	.location-notice > div:not(.notice-icon) { min-width:180px; flex:1; }
+	.location-notice > .secondary-button { margin-left:auto; }
+	.notice-card.warning { background:linear-gradient(130deg,rgba(92,70,31,.78),rgba(57,43,29,.8)); border-color:rgba(255,202,103,.35); }
 .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
 .quick-card { min-height:101px; padding:12px 9px; text-align:left; border-radius:18px; background:linear-gradient(150deg,#192942,#132239); border:1px solid var(--line); color:var(--text); transition:transform .18s ease; }
 .quick-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:11px; color:var(--teal); background:var(--teal-faint); margin-bottom:10px; }

@@ -1,6 +1,8 @@
 import { districts, provinces } from '../data/fixtures.js';
 import { provinceCoordinates } from '../data/province-coordinates.js';
 import { moilCityIds } from '../data/moil-city-ids.js';
+import { provinceCodes } from '../data/province-codes.js';
+import { NSOFT_FUEL_API_KEY as BUILD_NSOFT_FUEL_API_KEY } from '../runtime-config.js';
 
 export const FUEL_SOURCES = {
   epdk: {
@@ -15,6 +17,7 @@ export const FUEL_SOURCES = {
   sunpet: { name: 'Sunpet', role: 'Tarih damgalı tavsiye edilen pompa fiyatı', url: 'https://www.sunpettr.com.tr/yakit-fiyatlari' },
   moil: { name: 'M Oil', role: 'Tarih damgalı ilçe pompa fiyatı', url: 'https://moil.com.tr/akaryakit-fiyatlari' },
   lukoil: { name: 'Lukoil Türkiye', role: 'Tarih damgalı pompa ve LPG fiyatı', url: 'https://www.lukoil.com.tr/akaryakit-fiyatlari' },
+  nsoft: { name: 'NSoft Yakıt Alarmı API', role: 'APK’da kullanılan toplu fiyat API’si; BP ürün alanları ve ilçe referansı', url: 'https://api.nsoft.com.tr/fuel/prices' },
   opet: { name: 'Opet', role: 'Fiyat oluşumu ve serbest fiyatlandırma açıklaması', url: 'https://www.opet.com.tr/akaryakit-fiyatlari-nasil-olusur', referenceOnly: true },
 };
 
@@ -22,6 +25,7 @@ const ANADOLU = new Set(['Adalar','Ataşehir','Beykoz','Çekmeköy','Kadıköy',
 const TURKISH_MONTHS = { ocak:'01', şubat:'02', mart:'03', nisan:'04', mayıs:'05', haziran:'06', temmuz:'07', ağustos:'08', eylül:'09', ekim:'10', kasım:'11', aralık:'12' };
 const slug = value => String(value || 'istanbul').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/\u0307/g, '').replace(/[çğıöşü]/g, letter => ({ç:'c',ğ:'g',ı:'i',ö:'o',ş:'s',ü:'u'}[letter] || letter)).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const upperSlug = value => slug(value).replace(/-/g, '_').toUpperCase();
+const nsoftApiKey = () => (typeof process !== 'undefined' && process.env?.NSOFT_FUEL_API_KEY) || BUILD_NSOFT_FUEL_API_KEY || '';
 const normalize = value => String(value || '').toLocaleUpperCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/İ/g, 'I').replace(/[^A-Z0-9()/_ ]/g, ' ').replace(/\s+/g, ' ').trim();
 const numberPattern = /\b(\d{1,3})[.,](\d{2})\b/g;
 const numberList = value => [...String(value || '').matchAll(numberPattern)].map(match => Number(`${match[1]}.${match[2]}`));
@@ -76,6 +80,11 @@ function sourceInfo(resource) {
   const published = sourceDate(resource.text);
   const lastModified = resource.lastModified ? formatDateTime(resource.lastModified) : null;
   return { sourceDate: published || null, checkedAt: resource.checkedAt, dateLabel: published ? `Kaynak tarihi: ${published}` : lastModified ? `HTTP son değişiklik: ${lastModified}` : 'Kaynak tarihi yayınlanmıyor' };
+}
+function apiDate(value) {
+  const text = String(value || '').trim();
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : normalizeSourceDate(text);
 }
 function tableRows(html) {
   const rows = [];
@@ -137,6 +146,26 @@ function parseLukoil(html, kind = 'base') {
   }
   return prices;
 }
+function productPrice(products, keys) {
+  const values = keys.map(key => products?.[key]).map(value => {
+    if (value && typeof value === 'object') return finite(value.price_incl_tax ?? value.kdv_dahil ?? value.price);
+    return finite(String(value || '').replace(',', '.'));
+  }).filter(value => value != null && value > 0);
+  return values.length ? Math.min(...values) : null;
+}
+function parseNsoft(payload, type = 'benzin') {
+  const data = payload?.data && !Array.isArray(payload.data) ? payload.data : Array.isArray(payload?.data) ? payload.data[0] : payload;
+  const districts = data?.districts || data?.ilceler || [];
+  const keys = type === 'motorin' ? ['bp_diesel','bp_ultimate_diesel','motorin','diesel'] : type === 'lpg' ? ['otogaz','lpg'] : ['bp_kursunsuz','bp_ultimate_kursunsuz','kursunsuz','benzin'];
+  const prices = {};
+  for (const district of districts) {
+    const name = district?.name || district?.ilce_adi || district?.ilce || district?.adi;
+    const products = district?.products || district?.fiyatlar || district?.prices || district;
+    const price = productPrice(products, keys);
+    if (name && price != null) prices[canonicalKey(name)] = { [type]: round(price) };
+  }
+  return { prices, sourceDate: apiDate(data?.price_date || payload?.meta?.price_date), generatedAt: payload?.meta?.generated_at || null, cityName: data?.name || null, districtCount: districts.length };
+}
 function averageMap(prices, city) {
   const result = {};
   const totals = {};
@@ -186,6 +215,23 @@ function lukoilUrl(city, type) { return cityUrl(city, type, 'lukoil'); }
 
 async function loadProviders(city, type = 'benzin') {
   const jobs = [
+    { id:'nsoft', source:FUEL_SOURCES.nsoft, run:async()=>{
+      const key=nsoftApiKey();
+      if(!key) throw new Error('NSoft API anahtarı yapılandırılmadı');
+      const controller=typeof AbortController!=='undefined'?new AbortController():null;
+      const timer=controller?setTimeout(()=>controller.abort(),18000):null;
+      try {
+        const cityCode=provinceCodes[city];
+        if(!cityCode) throw new Error('NSoft için seçili ilin plaka kodu bulunamadı');
+        const response=await fetch(`https://api.nsoft.com.tr/fuel/prices?city=${encodeURIComponent(cityCode)}`,{cache:'no-store',signal:controller?.signal,headers:{Accept:'application/json','X-Api-Key':key,'User-Agent':'YakitAlarmi/1.0 live-price-reader'}});
+        if(!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload=await response.json();
+        if(payload?.success!==true) throw new Error(payload?.error || 'NSoft API başarısız yanıt verdi');
+        const parsed=parseNsoft(payload,type);
+        if(!Object.keys(parsed.prices).length) throw new Error('NSoft API’de seçili yakıt türü için fiyat satırı yok');
+        return { prices:parsed.prices, averages:averageMap(parsed.prices,city), sourceDate:parsed.sourceDate, checkedAt:formatDateTime(), dateLabel:parsed.sourceDate?`Kaynak tarihi: ${parsed.sourceDate}`:'Kaynak tarihi yayınlanmıyor', url:`https://api.nsoft.com.tr/fuel/prices?city=${encodeURIComponent(cityCode)}`, generatedAt:parsed.generatedAt, cityName:parsed.cityName, districtCount:parsed.districtCount };
+      } finally { if(timer) clearTimeout(timer); }
+    } },
     { id:'petrolOfisi', source:FUEL_SOURCES.petrolOfisi, run:async()=>{ const page=await fetchResource(FUEL_SOURCES.petrolOfisi.url); const prices=parsePetrolOfisi(page.text); return { prices, averages:averageMap(prices,city), ...sourceInfo(page), url:FUEL_SOURCES.petrolOfisi.url }; } },
     { id:'aytemiz', source:FUEL_SOURCES.aytemiz, run:async()=>{ const urls=[cityUrl(city,'base','aytemiz'),cityUrl(city,'lpg','aytemiz')].filter(Boolean); const results=await Promise.allSettled(urls.map(fetchResource)); const base=results[0]?.status==='fulfilled'?results[0].value:null; const lpg=results[1]?.status==='fulfilled'?results[1].value:null; const prices=mergeMaps(parseAytemiz(base?.text || '','base'),parseAytemiz(lpg?.text || '','lpg')); if(!Object.keys(prices).length) throw new Error('Aytemiz tablosu okunamadı'); const relevant=type==='lpg'?lpg:base; const info=sourceInfo(relevant||base||lpg); return { prices, averages:averageMap(prices,city), ...info, url:(type==='lpg'?urls[1]:urls[0]) || FUEL_SOURCES.aytemiz.url }; } },
     { id:'sunpet', source:FUEL_SOURCES.sunpet, run:async()=>{ const responses=await Promise.all(sunpetUrls(city).map(async url=>({url,page:await fetchResource(url)}))); const prices=responses.reduce((all,item)=>mergeMaps(all,parseSunpet(item.page.text)),{}); if(!Object.keys(prices).length) throw new Error('Sunpet tablosu okunamadı'); const info=sourceInfo(responses.find(item=>item.page)?.page); const dated=responses.map(item=>sourceInfo(item.page)).find(item=>item.sourceDate); if(!info.sourceDate&&dated)Object.assign(info,dated); return { prices, averages:averageMap(prices,city), ...info, url:responses[0].url }; } },
@@ -206,15 +252,20 @@ function locationItems(city) { return city === 'İstanbul' ? districts : [{ name
 function rowsFromProviders({ city, type, providers, referenceCity=null }) {
   const rows = locationItems(city).map(item => {
     const sourceValues=providers.filter(provider=>provider.ok).map(provider=>{ const price=resolveSourcePrice(provider,item.name,referenceCity||city,type); return price==null?null:providerRecord(provider,price); }).filter(Boolean);
-    const dated=providers.filter(provider=>provider.ok).map(provider=>provider.result?.sourceDate).filter(Boolean);
+    const dated=sourceValues.map(record=>record.sourceDate).filter(Boolean);
     const currentDate=dated.slice().sort((a,b)=>sourceDateKey(b)-sourceDateKey(a))[0] || null;
-    const aligned=sourceValues.filter(record=>!currentDate || !record.sourceDate || record.sourceDate===currentDate);
-    const excluded=sourceValues.filter(record=>currentDate && record.sourceDate && record.sourceDate!==currentDate);
+    const strictDateSet=dated.length >= 2;
+    const todayDate=normalizeSourceDate(formatDateTime());
+    const sourceDateIsStale=Boolean(currentDate && todayDate && sourceDateKey(currentDate)<sourceDateKey(todayDate));
+    const activeDate=sourceDateIsStale && !strictDateSet ? null : currentDate;
+    const aligned=activeDate ? strictDateSet ? sourceValues.filter(record=>record.sourceDate===activeDate) : sourceValues.filter(record=>!record.sourceDate || record.sourceDate===activeDate) : sourceDateIsStale && !strictDateSet ? sourceValues.filter(record=>!record.sourceDate) : sourceValues;
+    const excluded=activeDate ? sourceValues.filter(record=>strictDateSet ? record.sourceDate!==activeDate : Boolean(record.sourceDate && record.sourceDate!==activeDate)).map(record=>({ ...record, exclusionReason:record.sourceDate ? 'Eski tarihli' : 'Kaynak tarihi doğrulanamadı' })) : sourceDateIsStale && !strictDateSet ? sourceValues.filter(record=>record.sourceDate).map(record=>({ ...record, exclusionReason:'Eski tarihli' })) : [];
     const price=aligned.length?round(aligned.reduce((sum,record)=>sum+record.price,0)/aligned.length):null;
     const dateLabels=[...new Set(aligned.map(record=>record.dateLabel).filter(Boolean))];
     const checkedAt=aligned.map(record=>record.checkedAt).filter(Boolean).sort().at(-1);
     const staleNote=excluded.length?` · Eski tarihli kaynak dışarıda: ${excluded.map(record=>record.name).join(', ')}`:'';
-    return { city, district:item.name, price, updatedAt:aligned.length?`${dateLabels.join(' · ')}${checkedAt?` · Kontrol: ${checkedAt}`:''}${staleNote}`:'Canlı veri alınamadı', source:aligned.map(record=>record.name).join(' + ')||'Gösterim yok', sourceCount:aligned.length, sourceValues:aligned, excludedSourceValues:excluded, sourceDate:currentDate, live:price!=null, trusted:aligned.length>=2, cityReference:Boolean(referenceCity||aligned.some(record=>record.id==='petrolOfisi')), referenceCity:referenceCity||null, sourceUrl:aligned[0]?.url||FUEL_SOURCES.epdk.url, type };
+    const dateAligned=Boolean(activeDate && !sourceDateIsStale && strictDateSet && aligned.length>=2 && aligned.every(record=>record.sourceDate===activeDate));
+    return { city, district:item.name, price, updatedAt:aligned.length?`${dateLabels.join(' · ')}${checkedAt?` · Kontrol: ${checkedAt}`:''}${staleNote}`:'Canlı veri alınamadı', source:aligned.map(record=>record.name).join(' + ')||'Gösterim yok', sourceCount:aligned.length, sourceValues:aligned, excludedSourceValues:excluded, sourceDate:activeDate, dateAligned, live:price!=null, trusted:aligned.length>=2 && dateAligned, cityReference:Boolean(referenceCity||aligned.some(record=>record.id==='petrolOfisi')), referenceCity:referenceCity||null, sourceUrl:aligned[0]?.url||FUEL_SOURCES.epdk.url, type };
   });
   return rows;
 }
@@ -238,9 +289,10 @@ async function directPrices({city,type}) {
     }
   }
   const maxSources=Math.max(0,...rows.map(row=>row.sourceCount));
+  const trustedRows=rows.filter(row=>row.trusted);
   const staleSources=[...new Set(rows.flatMap(row=>(row.excludedSourceValues||[]).map(record=>record.name)))];
-  const note=usedNearby.length?`Seçili ilde doğrudan canlı satır bulunamadı; ${usedNearby.join(', ')} çevre ilinin tarihli canlı ortalaması gösteriliyor.`:maxSources>=2?`Aynı ilçe/il referansına ait ${maxSources} birinci taraf dağıtıcı verisinin basit aritmetik ortalaması gösteriliyor.`:maxSources===1?'Yalnızca tek canlı kaynak okundu; ortalama iddiası yapılmıyor.':'Canlı kaynaklara erişilemediği için sahte veya eski rakam gösterilmiyor.';
-  rows.meta={ live:rows.some(row=>row.live), trusted:rows.some(row=>row.trusted), sourceCount:maxSources, average:maxSources>=2, sources:[...sourceSummary(providers),{id:'epdk',name:FUEL_SOURCES.epdk.name,url:FUEL_SOURCES.epdk.url,ok:false,dateLabel:'Resmi rapor/servis referansı; canlı SOAP sorgusu yetki gerektiriyor',checkedAt:null,error:'EPDK resmi servisinde sorgu yetkisi gerekiyor.'}], authority:FUEL_SOURCES.epdk, checkedAt:formatDateTime(), nearby:usedNearby, staleSources, note:staleSources.length?`${note} Eski tarihli kaynaklar ortalamaya alınmadı: ${staleSources.join(', ')}.`:note };
+  const note=usedNearby.length?`Seçili ilde doğrudan canlı satır bulunamadı; ${usedNearby.join(', ')} çevre ilinin tarihli canlı ortalaması gösteriliyor.`:trustedRows.length?`Aynı ilçe/il referansına ait tarih uyumu doğrulanmış ${Math.max(...trustedRows.map(row=>row.sourceCount))} canlı veri sağlayıcısının basit aritmetik ortalaması gösteriliyor.`:maxSources>=2?'Birden fazla canlı kaynak okundu ancak kaynak tarihleri aynı veya doğrulanabilir olmadığı için doğrulanmış ortalama etiketi kullanılmıyor.':'Yalnızca tek canlı kaynak okundu; ortalama iddiası yapılmıyor.';
+  rows.meta={ live:rows.some(row=>row.live), trusted:rows.some(row=>row.trusted), sourceCount:maxSources, average:trustedRows.length>0, sources:[...sourceSummary(providers),{id:'epdk',name:FUEL_SOURCES.epdk.name,url:FUEL_SOURCES.epdk.url,ok:false,dateLabel:'Resmi rapor/servis referansı; canlı SOAP sorgusu yetki gerektiriyor',checkedAt:null,error:'EPDK resmi servisinde sorgu yetkisi gerekiyor.'}], authority:FUEL_SOURCES.epdk, checkedAt:formatDateTime(), nearby:usedNearby, staleSources, note:staleSources.length?`${note} Tarihi eski veya doğrulanamayan kaynaklar ortalamaya alınmadı: ${staleSources.join(', ')}.`:note };
   return rows;
 }
 export async function getFuelPrices({city='İstanbul',type='benzin'}={}) {

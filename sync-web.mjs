@@ -1,10 +1,11 @@
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 const output = 'www';
 if (existsSync(output)) rmSync(output, { recursive:true, force:true });
 mkdirSync(output, { recursive:true });
-for (const item of ['index.html', 'styles.css', 'app.js', 'data', 'services', 'public', 'assets']) {
+for (const item of ['index.html', 'styles.css', 'app.js', 'runtime-config.js', 'data', 'services', 'public', 'assets']) {
   if (existsSync(item)) cpSync(item, `${output}/${item}`, { recursive:true });
 }
+writeFileSync(`${output}/runtime-config.js`, `// Generated at build time; the API key is never committed to source.\nexport const NSOFT_FUEL_API_KEY = ${JSON.stringify(process.env.NSOFT_FUEL_API_KEY || '')};\n`);
 mkdirSync(`${output}/vendor`, { recursive:true });
 const vendor = [
   ['node_modules/@capacitor/camera/dist/plugin.js', 'camera.js'],

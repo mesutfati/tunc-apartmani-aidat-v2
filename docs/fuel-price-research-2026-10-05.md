@@ -51,3 +51,23 @@ Canlı regresyon kontrollerinde benzin, motorin ve LPG için İstanbul, Ankara, 
 [10]: https://moil.com.tr/akaryakit-fiyatlari "M Oil resmi güncel pompa fiyatları"
 [11]: https://www.lukoil.com.tr/akaryakit-fiyatlari "Lukoil resmi pompa ve LPG fiyatları"
 [12]: https://www.opet.com.tr/akaryakit-fiyatlari "Opet resmi akaryakıt fiyatları"
+
+
+## Ek güvenlik politikası
+
+- Birden fazla kaynak aynı doğrulanabilir tarihe sahipse yalnızca o tarihteki değerler “tarih uyumlu canlı kaynak ortalaması” olarak etiketlenir ve fiyat değişimi alarmı üretilebilir.
+- Kaynak tarihleri doğrulanamıyorsa fiyat tamamen gizlenmez; ancak kartta “canlı kaynaklar okundu; tarih uyumu doğrulanmadı” gösterilir ve doğrulanmış alarm üretilmez.
+- Tek eski tarihli kaynak, tarihsiz diğer tabloların güncel sonucu gibi kullanılmaz. Örneğin Lukoil LPG sayfasının 02.10.2026 kaydı, 05.10.2026 kontrolünde Petrol Ofisi ve Aytemiz tablolarına karıştırılmamıştır.
+
+## Konum erişimi davranışı
+
+Android, konum servisini uygulamanın gizlice açmasına veya kullanıcıdan habersiz sürekli koordinat almasına izin vermez. Uygulama ilk girişte gerçek Capacitor Geolocation iznini ister. İzin verilmezse ana ekranda konumun neden gerekli olduğu ve Android ayar yolu görünür; “Konumu aç / tekrar dene” düğmesi sistem izin isteğini yeniden başlatır. Cihazın genel Konum anahtarı kapalıysa ayrıca Ayarlar > Konum uyarısı verilir. İstasyon, park, kaza/acil durum ve ön plan sürüş akışları ihtiyaç olduğunda yeniden ölçüm yapar; gizli arka plan takip iddiası yoktur.
+
+
+## NSoft API entegrasyonu (5 Ekim 2026)
+
+İncelenen `Yakıt Alarmı 4.1.38` APK’sının kullandığı canlı fiyat endpointi doğrulandı: `https://api.nsoft.com.tr/fuel/prices?city=<01-81 plaka kodu>`. API yanıtında `price_date`, `generated_at`, ilçe listesi ve `bp_kursunsuz`, `bp_diesel`, `otogaz` gibi ürün alanları bulunuyor. Sürüş Cepte’ye bu kaynak `NSoft Yakıt Alarmı API` adıyla ayrı sağlayıcı olarak eklendi; NSoft değeri artık aynı ürün, il/ilçe kapsamı ve tarih uyumu kurallarından geçerek diğer kaynaklarla ortalamaya katılabiliyor.
+
+NSoft, birinci taraf dağıtıcı kaynağı olarak etiketlenmiyor; APK’de kullanılan toplu veri sağlayıcısı olarak kaynaklar ekranında ayrı gösteriliyor. NSoft’un API anahtarı kaynak depoya yazılmadı. Web sunucusunda `NSOFT_FUEL_API_KEY` ortam değişkeninden, native APK derlemesinde ise yalnızca build çıktısındaki `www/runtime-config.js` dosyasına build zamanı aktarılıyor. Anahtar yoksa NSoft sağlayıcısı sessizce sahte değer üretmiyor; kaynaklar ekranında yapılandırılmadı hatası gösteriliyor ve mevcut diğer sağlayıcılar çalışmaya devam ediyor.
+
+İlk canlı entegrasyon testi İstanbul benzin, Ankara motorin ve İzmir LPG için başarılı oldu. Örnek olarak İstanbul Kadıköy’de NSoft, Aytemiz, Sunpet ve Lukoil aynı tarihli canlı katkı verdi; Petrol Ofisi daha eski tarihli olduğu için ortalamaya alınmadı. İzmir LPG’de kaynak tarihi güncel kalan tek kaynak NSoft olduğu için uygulama tek kaynak uyarısını korudu ve doğrulanmış ortalama iddiası yapmadı.

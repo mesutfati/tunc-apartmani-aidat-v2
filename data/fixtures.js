@@ -17,6 +17,7 @@ export const seedState = {
   view:'home',
   fuelType:'benzin',
   location:{ city:'İstanbul', district:'Kadıköy' },
+  locationAccess:{ status:'unknown', permission:'prompt', serviceEnabled:null, checkedAt:null, message:'' },
   favorites:['Kadıköy', 'Beşiktaş'],
   pricesOnlyFavorites:false,
   gps:true,
@@ -40,7 +41,7 @@ export const seedState = {
   healthReport:null,
   obdDevice:null,
   hgs:[],
-  settings:{ notifications:true, autoBackup:false, motionTracking:false, mileage:0 },
+  settings:{ notifications:true, autoBackup:false, motionTracking:false, mileage:0, locationPromptSeen:false },
   notifications:[]
 };
 
