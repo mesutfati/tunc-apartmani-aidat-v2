@@ -56,16 +56,46 @@ export async function readDocument(type = 'insurance') {
   const ocr = nativePlugin('Vision');
   if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture();
   try {
-    const photo = await camera.getPhoto({ quality:88, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Belge fotoğrafı', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
-    const imageUri = photo?.path || photo?.webPath;
+    let imageUri = '';
+    let imageUris = [];
+    let scanMode = 'camera';
+    let pageCount = 1;
+    if (ocr?.scanDocument) {
+      try {
+        const scanned = await ocr.scanDocument({ pageLimit:type === 'accident' ? 2 : 1 });
+        imageUri = scanned?.imageUri || '';
+        imageUris = Array.isArray(scanned?.imageUris) ? scanned.imageUris.filter(Boolean) : (imageUri ? [imageUri] : []);
+        pageCount = Number(scanned?.pageCount) || 1;
+        scanMode = scanned?.scanMode || 'document';
+      } catch (scannerError) {
+        if (/iptal|cancel/i.test(scannerError?.message || '')) return { ok:false, native:true, cancelled:true, message:'Belge taraması iptal edildi.' };
+        // Google Play Services veya cihaz desteklemiyorsa standart kameraya düş.
+      }
+    }
+    if (!imageUri) {
+      const photo = await camera.getPhoto({ quality:95, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Belgenin tamamını düz kadraja alın', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
+      imageUri = photo?.path || photo?.webPath;
+      imageUris = imageUri ? [imageUri] : [];
+      scanMode = 'camera';
+    }
     if (!imageUri) throw new Error('Kamera fotoğraf yolu döndürmedi.');
-    if (!ocr?.detectText || !photo.path) return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:'Belge fotoğrafı alındı. OCR servisi kullanılamadı; alanları formda elle tamamlayın.' };
+    if (!ocr?.detectText) return { ok:true, native:true, ocr:false, imageUri, scanMode, pageCount, parsed:{}, rawText:'', message:'Belge görüntüsü alındı. OCR servisi kullanılamadı; alanları formda elle tamamlayın.' };
     try {
-      const result = await ocr.detectText({ filename:imageUri, orientation:'UP' });
-      const rawText = result?.text || (result?.textDetections || []).map(item => item.text).join('\n');
-      return { ok:true, native:true, ocr:true, imageUri, parsed:parseDocumentText(rawText, type), rawText, message:'Belge metni cihazda OCR ile okundu.' };
+      const pages = imageUris.length ? imageUris : [imageUri];
+      const texts = [];
+      let passes = 0;
+      let enhanced = false;
+      for (const pageUri of pages) {
+        const result = await ocr.detectText({ filename:pageUri, orientation:'UP' });
+        const pageText = result?.text || (result?.textDetections || []).map(item => item.text).join('\n');
+        if (pageText) texts.push(pageText);
+        passes += Number(result?.passes) || 1;
+        enhanced = enhanced || result?.enhanced === true;
+      }
+      const rawText = texts.join('\n\n');
+      return { ok:true, native:true, ocr:true, imageUri, imageUris:pages, scanMode, pageCount:pages.length, passes, enhanced, parsed:parseDocumentText(rawText, type), rawText, message:scanMode === 'document' ? `Belge tarandı, perspektif düzeltildi ve ${pages.length} sayfa iki OCR geçişiyle okundu.` : 'Belge metni iki OCR geçişiyle cihazda okundu.' };
     } catch (ocrError) {
-      return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:`Belge fotoğrafı alındı; OCR çalışmadı. Alanları formda elle tamamlayın. (${ocrError?.message || 'OCR hatası'})` };
+      return { ok:true, native:true, ocr:false, imageUri, scanMode, pageCount, parsed:{}, rawText:'', message:`Belge görüntüsü alındı; OCR çalışmadı. Alanları formda elle tamamlayın. (${ocrError?.message || 'OCR hatası'})` };
     }
   } catch (error) {
     return { ok:false, native:true, ocr:false, parsed:{}, message:error?.message || 'Kamera/OCR işlemi tamamlanamadı.' };
