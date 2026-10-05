@@ -143,6 +143,8 @@ function updateRefuelPage(percent) {
   set('level-label', `${stats.level}% · Depodaki Mevcut Yakıt Miktarı`);
   const dial = document.querySelector('[data-refuel-page-dial]');
   if (dial) dial.style.setProperty('--refuel-angle', `${stats.level * 1.8}deg`);
+  const slider = document.querySelector('[data-refuel-page-slider]');
+  if (slider) slider.style.setProperty('--slider-level', `${stats.level}%`);
 }
 function openRefuelView(vehicle = null) {
   const selectedVehicle = vehicle || state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
@@ -393,6 +395,7 @@ function accountView() {
 async function loadNearbyStations() { nearbyStations={...nearbyStations,status:'loading',error:''}; render(); try { const [positionResult, priceResult] = await Promise.all([requestCurrentPosition(), getFuelPrices({ city:state.location.city, district:state.location.district, type:state.fuelType })]); rememberLocationResult(positionResult); if (!positionResult.ok) throw new Error(positionResult.message || 'Konum alınamadı.'); const stationResult=await getNearbyStations(positionResult); priceRecords=priceResult; const selected=priceResult.find(row=>row.live && (!state.location.district || row.district===state.location.district)) || priceResult.find(row=>row.live); const activeVehicle=state.vehicles.find(vehicle=>vehicle.id===state.selectedVehicleId); const preferredBrand=activeVehicle?.favoriteStation || ''; const preferredKey=stationBrandKey(preferredBrand); const orderedStations=preferredKey ? [...stationResult.stations].sort((a,b)=>{ const aFav=stationBrandKey(a.brand).includes(preferredKey)?0:1; const bFav=stationBrandKey(b.brand).includes(preferredKey)?0:1; return aFav-bFav || Number(a.distanceKm)-Number(b.distanceKm); }) : stationResult.stations; nearbyStations={...stationResult,stations:orderedStations,status:'ready',preferredBrand,price:selected?.price ?? null,priceUpdatedAt:priceResult.meta?.checkedAt || selected?.updatedAt || ''}; } catch(error) { nearbyStations={...nearbyStations,status:'error',error:error?.message || 'Yakındaki istasyonlar alınamadı.'}; } render(); }
 function render() {
   app.innerHTML = `${header()}${state.view === 'home' ? homeView() : state.view === 'vehicles' ? vehiclesView() : state.view === 'journey' ? journeyView() : state.view === 'prices' ? pricesView() : state.view === 'refuel' ? refuelView() : accountView()}${nav()}`;
+  if (state.view === 'refuel') updateRefuelPage(refuelDraftPercent ?? (state.vehicles.find(item => item.id === state.selectedVehicleId)?.fuelLevelPercent || 0));
 }
 function openModal(title, subtitle, body) {
   modalLayer.innerHTML = `<section class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><div><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>`:''}</div><button class="close-button" data-action="close" aria-label="Kapat">${ico('close',19)}</button></div>${body}</section>`;
