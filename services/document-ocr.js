@@ -53,7 +53,7 @@ function browserCapture() {
 
 export async function readDocument(type = 'insurance') {
   const camera = nativePlugin('Camera');
-  const ocr = nativePlugin('CapacitorOcr');
+  const ocr = nativePlugin('Vision');
   if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture();
   try {
     const photo = await camera.getPhoto({ quality:88, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Belge fotoğrafı', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
@@ -61,8 +61,8 @@ export async function readDocument(type = 'insurance') {
     if (!imageUri) throw new Error('Kamera fotoğraf yolu döndürmedi.');
     if (!ocr?.detectText || !photo.path) return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:'Belge fotoğrafı alındı. OCR servisi kullanılamadı; alanları formda elle tamamlayın.' };
     try {
-      const result = await ocr.detectText({ filename:photo.path, orientation:'UP' });
-      const rawText = (result?.textDetections || []).map(item => item.text).join('\n');
+      const result = await ocr.detectText({ filename:imageUri, orientation:'UP' });
+      const rawText = result?.text || (result?.textDetections || []).map(item => item.text).join('\n');
       return { ok:true, native:true, ocr:true, imageUri, parsed:parseDocumentText(rawText, type), rawText, message:'Belge metni cihazda OCR ile okundu.' };
     } catch (ocrError) {
       return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:`Belge fotoğrafı alındı; OCR çalışmadı. Alanları formda elle tamamlayın. (${ocrError?.message || 'OCR hatası'})` };

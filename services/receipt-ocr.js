@@ -4,9 +4,9 @@ function parseReceiptText(rawText = '') {
   const text = String(rawText).replace(/\s+/g, ' ').trim();
   const lowerText = text.toLocaleLowerCase('tr-TR');
   const moneyMatches = [...text.matchAll(/(\d{1,3}(?:\.\d{3})+,\d{2}|\d+(?:[.,]\d{2}))\s*(?:TL|₺)?/gi)].map(m => Number(m[1].replace(/\./g, '').replace(',', '.'))).filter(n => n > 1);
-  const literMatch = text.match(/(\d+[.,]\d{2,3})\s*(?:lt|l|litre)/i);
+  const literMatch = text.match(/(?:liters?|litre|lt)\s*["']?\s*[:=]\s*["']?(\d+[.,]\d{1,3})/i) || text.match(/(\d+[.,]\d{2,3})\s*(?:lt|l|litre)/i);
   const plateMatch = text.match(/\b\d{2}\s?[A-ZÇĞİÖŞÜ]{1,3}\s?\d{2,4}\b/i);
-  const fuel = /motorin|diesel|mazot/.test(lowerText) ? 'Motorin' : /lpg|otogaz/.test(lowerText) ? 'LPG' : 'Benzin';
+  const fuel = /motorin|diesel|mazot/.test(lowerText) ? 'Motorin' : /lpg|otogaz/.test(lowerText) ? 'LPG' : /benzin|gasoline/.test(lowerText) ? 'Benzin' : '';
   return { rawText:text, amount:moneyMatches.length ? Math.max(...moneyMatches) : null, liters:literMatch ? Number(literMatch[1].replace(',', '.')) : null, plate:plateMatch?.[0] || '', fuel };
 }
 
@@ -20,7 +20,7 @@ function browserCapture() {
 
 export async function readReceipt() {
   const camera = nativePlugin('Camera');
-  const ocr = nativePlugin('CapacitorOcr');
+  const ocr = nativePlugin('Vision');
   if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture();
   try {
     const photo = await camera.getPhoto({ quality:86, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Fiş fotoğrafı', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
@@ -28,8 +28,8 @@ export async function readReceipt() {
     if (!imageUri) throw new Error('Kamera fotoğraf yolu döndürmedi.');
     if (!ocr?.detectText || !photo.path) return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:'Fiş fotoğrafı alındı. OCR servisi kullanılamadı; bilgileri formda elle kontrol edin.' };
     try {
-      const result = await ocr.detectText({ filename:photo.path, orientation:'UP' });
-      const rawText = (result?.textDetections || []).map(item => item.text).join('\n');
+      const result = await ocr.detectText({ filename:imageUri, orientation:'UP' });
+      const rawText = result?.text || (result?.textDetections || []).map(item => item.text).join('\n');
       return { ok:true, native:true, ocr:true, imageUri, parsed:parseReceiptText(rawText), rawText, message:'Fiş metni cihazda OCR ile okundu.' };
     } catch (ocrError) {
       return { ok:true, native:true, ocr:false, imageUri, parsed:{}, rawText:'', message:`Fiş fotoğrafı alındı; OCR çalışmadı. Bilgileri elle kontrol edin. (${ocrError?.message || 'OCR hatası'})` };

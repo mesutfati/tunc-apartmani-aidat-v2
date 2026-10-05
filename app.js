@@ -4,7 +4,8 @@ import { getFuelPrices } from './services/fuel-prices.js';
 import { FUEL_SOURCES } from './services/fuel-prices.js';
 import { requestCurrentPosition } from './services/gps.js';
 import { requestNotificationPermission, scheduleFuelNotification, scheduleCareReminder } from './services/notifications.js';
-import { readReceipt } from './services/receipt-ocr.js';
+import { readReceipt, parseReceiptText } from './services/receipt-ocr.js';
+import { scanBarcode } from './services/barcode.js';
 import { demoGoogleSignIn } from './services/auth.js';
 import { queueCloudBackup } from './services/cloud-backup.js';
 import { corollaIcon } from './services/vehicle-art.js';
@@ -28,6 +29,7 @@ let healthReport = healthSnapshot?.connected === true ? (state.healthReport || a
 let earlyWarning = state.earlyWarning || null;
 let nearbyStations = { status:'idle', stations:[], source:'', checkedAt:'', price:null, priceUpdatedAt:'' };
 let pendingDocumentDraft = null;
+let pendingBarcodeResult = null;
 let documentOcrBusy = false;
 let tripWatchId = null;
 let lastTripPersistAt = 0;
@@ -282,7 +284,7 @@ function reportModal() { const total=state.trips.reduce((s,t)=>s+Number(t.km||0)
 function badgesModal() { const badges=[['route','İlk rota',state.trips.length>0],['fuel','Bütçe gözü',state.receipts.length>0],['park','Park uzmanı',state.parks.length>0],['badge','100 km',state.trips.reduce((s,t)=>s+Number(t.km||0),0)>=100],['chart','Raporcu',state.trips.length>=3],['star','Favori avcısı',state.favorites.length>=5]]; openModal('Sürüş rozetleri','Rozetler yalnızca gerçek yerel kayıt koşulları sağlandığında açılır.',`<div class="badge-grid">${badges.map(([i,t,earned]) => `<div class="badge ${earned?'':'locked'}"><i class="badge-mark">${ico(i,19)}</i><b>${t}</b><span>${earned?'Açık':'Kilitli'}</span></div>`).join('')}</div>`); }
 function openParkInMaps(id) { const park=state.parks.find(item=>item.id===id); if (!park) return toast('Park kaydı bulunamadı.', true); if (park.latitude == null || park.longitude == null) return toast('Bu park kaydında GPS koordinatı yok; yeni park kaydında konum izni verin.', true); const native=Boolean(globalThis.Capacitor?.isNativePlatform?.() || globalThis.Capacitor?.getPlatform?.()==='android'); const url=native ? `geo:${park.latitude},${park.longitude}?q=${park.latitude},${park.longitude}(${encodeURIComponent(park.title || 'Park')})` : `https://www.google.com/maps/search/?api=1&query=${park.latitude},${park.longitude}`; window.open(url, native ? '_system' : '_blank'); }
 function historyModal(kind) { if (kind === 'parks') { const parks=state.parks || []; const body=parks.length ? parks.map(p=>`<button class="list-row" data-action="navigate-park" data-id="${esc(p.id)}"><i class="row-icon yellow">${ico('park',19)}</i><span class="row-main"><b>${esc(p.title || 'Park konumu')}</b><span>${esc(p.date || '')} · ${esc(p.note || 'Konum kaydı')}</span></span><span class="row-end"><strong>${p.latitude != null ? 'Haritada aç' : 'GPS yok'}</strong></span>${ico('chevron',16)}</button>`).join('') : '<div class="empty-card"><p>Yeni bir park kaydı oluşturduğunuzda burada görünür.</p></div>'; openModal('Geçmiş parklar',parks.length?'Park kaydına dokunarak haritada açın.':'Henüz kayıt bulunmuyor.',`<div class="card list-card">${body}</div>`); return; } const trips=state.trips || []; const body=trips.length ? trips.map(t=>listRow({icon:'route',title:t.title,subtitle:`${t.date} · ${t.duration}${t.note?' · '+t.note:''}`,end:`${t.km} km`})).join('') : '<div class="empty-card"><p>Yeni bir kayıt oluşturduğunuzda burada görünür.</p></div>'; openModal('Geçmiş sürüşler',trips.length?'Yerel cihaz kayıtları.':'Henüz kayıt bulunmuyor.',`<div class="card list-card">${body}</div>`); }
- function documentsModal() { const accidents=state.accidents || []; const receipts=state.receipts || []; const accidentRows=accidents.map(item=>{ const photo=item.photos?.[0] || item.photo; const gps=item.gps?.latitude != null ? `${Number(item.gps.latitude).toFixed(5)}, ${Number(item.gps.longitude).toFixed(5)}` : 'GPS yok'; return `<article class="document-row">${photo?.dataUrl ? `<img src="${esc(photo.dataUrl)}" alt="${esc(item.title)}" class="document-thumb">` : `<i class="row-icon coral">${ico('alert',19)}</i>`}<span class="document-copy"><b>${esc(item.title)}</b><small>${esc(item.occurredAt || item.date)} · ${esc(item.plate || 'Plaka yok')} · ${gps}</small><small>${item.injury === 'Var' ? 'Yaralanma bildirildi' : 'Yaralanma yok/bilinmiyor'} · ${esc(item.official || 'Resmi kayıt yok')}</small></span><button class="secondary-button" data-action="edit-accident" data-id="${item.id}">Düzenle</button></article>`; }).join(''); const receiptRows=receipts.map(item=>`<div class="document-row"><i class="row-icon">${ico('receipt',19)}</i><span class="document-copy"><b>${esc(item.fuel || 'Yakıt fişi')} · ${item.amount ? money(item.amount) : 'Tutar okunamadı'}</b><small>${esc(item.date)}${item.plate ? ` · ${esc(item.plate)}` : ''}</small></span></div>`).join(''); const content=`<div class="sheet-actions"><button class="primary-button" data-action="accident">Yeni kaza tutanağı</button></div><div class="section-head"><h4>Kaza tutanakları</h4><span class="muted" style="font-size:10px">${accidents.length} kayıt</span></div>${accidentRows || '<div class="empty-card"><p>Henüz kaza tutanağı yok.</p></div>'}${receipts.length ? `<div class="section-head"><h4>Yakıt fişleri</h4></div>${receiptRows}` : ''}`; openModal('Yolculuk belgeleri','Kaza tutanakları düzenlenebilir; GPS, fotoğraf ve acil durum bilgileri cihazda tutulur.',content); }
+ function documentsModal() { const accidents=state.accidents || []; const receipts=state.receipts || []; const accidentRows=accidents.map(item=>{ const photo=item.photos?.[0] || item.photo; const gps=item.gps?.latitude != null ? `${Number(item.gps.latitude).toFixed(5)}, ${Number(item.gps.longitude).toFixed(5)}` : 'GPS yok'; return `<article class="document-row">${photo?.dataUrl ? `<img src="${esc(photo.dataUrl)}" alt="${esc(item.title)}" class="document-thumb">` : `<i class="row-icon coral">${ico('alert',19)}</i>`}<span class="document-copy"><b>${esc(item.title)}</b><small>${esc(item.occurredAt || item.date)} · ${esc(item.plate || 'Plaka yok')} · ${gps}</small><small>${item.injury === 'Var' ? 'Yaralanma bildirildi' : 'Yaralanma yok/bilinmiyor'} · ${esc(item.official || 'Resmi kayıt yok')}</small></span><button class="secondary-button" data-action="edit-accident" data-id="${item.id}">Düzenle</button></article>`; }).join(''); const receiptRows=receipts.map(item=>`<div class="document-row"><i class="row-icon">${ico('receipt',19)}</i><span class="document-copy"><b>${esc(item.fuel || 'Yakıt fişi')} · ${item.amount ? money(item.amount) : 'Tutar okunamadı'}</b><small>${esc(item.date)}${item.plate ? ` · ${esc(item.plate)}` : ''}</small></span></div>`).join(''); const content=`<div class="sheet-actions"><button class="primary-button" data-action="accident">Yeni kaza tutanağı</button><button class="secondary-button" data-action="barcode-scan">Karekod / barkod okut</button></div><div class="section-head"><h4>Kaza tutanakları</h4><span class="muted" style="font-size:10px">${accidents.length} kayıt</span></div>${accidentRows || '<div class="empty-card"><p>Henüz kaza tutanağı yok.</p></div>'}${receipts.length ? `<div class="section-head"><h4>Yakıt fişleri</h4></div>${receiptRows}` : ''}`; openModal('Yolculuk belgeleri','Kaza tutanakları düzenlenebilir; GPS, fotoğraf ve acil durum bilgileri cihazda tutulur.',content); }
 function notificationSettingsModal() {
   openModal('Bildirimler','Android 13+ için izin uygulama içindeki bu düğmeye dokununca istenir. Yalnızca canlı kaynakta doğrulanan fiyat değişimleri alarm üretir.',`<div class="switch-row"><i class="row-icon">${ico('bell',18)}</i><span class="switch-copy"><b>Doğrulanmış yakıt alarmı</b><span>Tahmin değil; iki veya daha fazla canlı kaynak ölçümü karşılaştırılır.</span></span>${switchControl('notifications',state.settings.notifications)}</div><button class="secondary-button full-button" data-action="request-notification" style="margin-top:14px">Android bildirim iznini aç</button><p class="muted" style="font-size:10px;line-height:1.45;margin-top:10px">İzin daha önce reddedildiyse Android Ayarlar &gt; Uygulamalar &gt; Sürüş Cepte &gt; Bildirimler yolundan açın. Web önizlemesinde tarayıcı site izni kullanılır.</p>`);
 }
@@ -304,6 +306,40 @@ function fuelSourceModal() {
 }
 function receiptResultModal(result) { const p=result.parsed || {}; const saved = p.amount || p.liters || p.plate; if (saved) { state.receipts = state.receipts || []; state.receipts.unshift({ id:uid('receipt'), date:'Şimdi', amount:p.amount, liters:p.liters, fuel:p.fuel, plate:p.plate, rawText:p.rawText || '' }); save(state); } openModal('Fiş okuma',result.message || 'Fiş işlemi tamamlandı.',`<div class="receipt-result"><div class="receipt-status ${result.ocr ? 'ok':''}">${result.ocr ? 'Cihaz içi OCR tamamlandı':'Fotoğraf alındı'}</div><div class="receipt-grid"><div><small>Yakıt</small><b>${esc(p.fuel || 'Belirsiz')}</b></div><div><small>Tutar</small><b>${p.amount ? money(p.amount) : 'Okunamadı'}</b></div><div><small>Litre</small><b>${p.liters ? `${p.liters.toLocaleString('tr-TR')} L` : 'Okunamadı'}</b></div><div><small>Plaka</small><b>${esc(p.plate || 'Eşleşmedi')}</b></div></div>${p.rawText ? `<details><summary>Ham OCR metni</summary><pre>${esc(p.rawText)}</pre></details>`:''}<p class="muted" style="font-size:10px;line-height:1.45">${result.native ? 'Görüntü cihazdan dışarı çıkarılmadan Android ML Kit ile işlendi.' : 'Web önizlemesinde kamera dosyası alındı; gerçek cihaz içi OCR APK paketinde çalışır.'}</p></div><button class="primary-button full-button" data-action="close">Kapat</button>`); }
 function documentOcrResultModal(result, type) { const p=result.parsed || {}; const fields = type === 'insurance' ? [['provider','Sigorta şirketi'],['policyNo','Poliçe numarası'],['startDate','Başlangıç tarihi'],['expiry','Bitiş tarihi'],['assistancePhone','Asistans telefonu']] : [['plate','Benim plakam'],['otherPlate','Karşı taraf plakası'],['insuranceCompany','Sigorta şirketi'],['policyNo','Poliçe numarası'],['otherPhone','Karşı taraf telefonu']]; const missing = fields.filter(([key]) => !p[key]).map(([,label]) => label); pendingDocumentDraft = { type, parsed:p, rawText:result.rawText || '' }; const rows = fields.map(([key,label]) => `<div class="metric-row"><span>${label}</span><b>${esc(p[key] || 'Eksik — formda doldurun')}</b></div>`).join(''); openModal(type === 'insurance' ? 'Poliçe OCR taslağı' : 'Kaza belgesi OCR taslağı',result.message || 'Belge taraması tamamlandı.',`<div class="receipt-result"><div class="receipt-status ${result.ocr ? 'ok':''}">${result.ocr ? 'Cihaz içi OCR tamamlandı' : 'Fotoğraf alındı · manuel kontrol gerekli'}</div><div class="metric-list">${rows}</div>${missing.length ? `<div class="notice-card warning" style="margin-top:12px"><div class="notice-icon">${ico('alert',20)}</div><div><strong>${missing.length} alan eksik</strong><p>${esc(missing.join(', '))}. Taslağı açıp bilgileri elle tamamlayın.</p></div></div>` : `<div class="notice-card"><div class="notice-icon">${ico('check',20)}</div><div><strong>Taslak hazır</strong><p>Kaydetmeden önce tüm alanları kontrol edebilirsiniz.</p></div></div>`}${p.rawText ? `<details><summary>Ham OCR metni</summary><pre>${esc(p.rawText)}</pre></details>` : ''}</div><div class="sheet-actions"><button class="secondary-button" data-action="close">Kapat</button><button class="primary-button" data-action="apply-document-draft" data-document="${type}">Taslağı forma aktar</button></div>`); }
+ function barcodeResultModal(result) {
+   pendingBarcodeResult = result;
+   const raw = String(result.rawValue || '').trim();
+   const parsed = parseReceiptText(raw);
+   const hasReceiptData = Boolean(parsed.amount || parsed.liters || parsed.plate || /motorin|diesel|mazot|lpg|otogaz|benzin/i.test(raw));
+   const isLink = /^https?:\/\//i.test(raw);
+   const saveButton = hasReceiptData ? '<button class="primary-button" data-action="save-barcode-receipt">Fiş taslağına kaydet</button>' : '';
+   const linkButton = isLink ? `<a class="secondary-button" href="${esc(raw)}" target="_blank" rel="noreferrer">Bağlantıyı aç</a>` : '';
+   openModal('Karekod sonucu', `${esc(result.format || 'QR / barkod')} · Bilgi kaydetmeden önce kontrol edilir.`, `<div class="receipt-result"><div class="receipt-status ok">Karekod okundu</div><div class="metric-list"><div class="metric-row"><span>Format</span><b>${esc(result.format || '—')}</b></div><div class="metric-row"><span>Yakıt</span><b>${esc(parsed.fuel || 'Belirlenemedi')}</b></div><div class="metric-row"><span>Tutar</span><b>${parsed.amount ? money(parsed.amount) : 'Belirlenemedi'}</b></div><div class="metric-row"><span>Litre</span><b>${parsed.liters ? `${parsed.liters.toLocaleString('tr-TR')} L` : 'Belirlenemedi'}</b></div><div class="metric-row"><span>Plaka</span><b>${esc(parsed.plate || 'Belirlenemedi')}</b></div></div><details><summary>Okunan veri</summary><pre>${esc(raw)}</pre></details><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">Karekod yalnızca bir bağlantı veya kimlik taşıyorsa uygulama otomatik alan uydurmaz; veriyi görüntüler. Fiş bilgisi içeriyorsa taslak olarak kaydedilebilir.</p></div><div class="sheet-actions">${saveButton}${linkButton}<button class="secondary-button" data-action="copy-barcode">Veriyi kopyala</button><button class="secondary-button" data-action="close">Kapat</button></div>`);
+ }
+ function saveBarcodeReceipt() {
+   const raw = pendingBarcodeResult?.rawValue || '';
+   const parsed = parseReceiptText(raw);
+   if (!raw || (!parsed.amount && !parsed.liters && !parsed.plate)) { toast('Karekodda kaydedilebilir fiş alanı bulunamadı.', true); return; }
+   state.receipts = state.receipts || [];
+   state.receipts.unshift({ id:uid('receipt'), date:'Şimdi', amount:parsed.amount, liters:parsed.liters, fuel:parsed.fuel, plate:parsed.plate, rawText:raw, source:'Karekod / barkod' });
+   pendingBarcodeResult = null;
+   closeModal();
+   persist();
+   toast('Karekoddan alınan fiş taslağı kaydedildi; alanları kontrol edin.');
+ }
+ async function copyBarcodeValue() {
+   const raw = pendingBarcodeResult?.rawValue || '';
+   if (!raw) return;
+   try { await navigator.clipboard.writeText(raw); toast('Karekod verisi panoya kopyalandı.'); }
+   catch { toast('Kopyalama izni alınamadı.', true); }
+ }
+ async function runBarcodeScan() {
+   closeModal();
+   toast('Karekod tarayıcı açılıyor…');
+   const result = await scanBarcode();
+   if (result.ok) barcodeResultModal(result);
+   else if (!result.cancelled) toast(result.message || 'Karekod okunamadı.', true);
+ }
  async function runDocumentOcr(target) {
    if (documentOcrBusy) return;
    documentOcrBusy = true;
@@ -427,6 +463,7 @@ app.addEventListener('click', async event => {
   else if (action === 'delete-vehicle') { state.vehicles=state.vehicles.filter(v=>v.id!==target.dataset.id); if(state.selectedVehicleId===target.dataset.id) state.selectedVehicleId=null; closeModal(); persist(); toast('Araç kaldırıldı.'); }
   else if (action === 'select-vehicle') { state.selectedVehicleId=target.dataset.id; persist(); toast('Aktif araç seçildi.'); }
   else if (action === 'receipt') { try { const r=await readReceipt(); receiptResultModal(r); } catch (error) { toast(error?.message || 'Fiş fotoğrafı alınamadı.', true); } }
+  else if (action === 'barcode-scan') await runBarcodeScan();
   else if (action === 'document-ocr') await runDocumentOcr(target);
   else if (action === 'apply-document-draft') applyDocumentDraft(target.dataset.document || 'insurance');
   else if (action === 'add-driver') driverModal();
@@ -464,6 +501,9 @@ modalLayer.addEventListener('click', async event => {
   const target = event.target.closest('[data-action]');
   if (event.target === modalLayer || target?.dataset.action === 'close') { closeModal(); return; }
   if (!target) return;
+  if (target.dataset.action === 'barcode-scan') { await runBarcodeScan(); return; }
+  if (target.dataset.action === 'save-barcode-receipt') { saveBarcodeReceipt(); return; }
+  if (target.dataset.action === 'copy-barcode') { await copyBarcodeValue(); return; }
   if (target.dataset.action === 'document-ocr') { await runDocumentOcr(target); return; }
   if (target.dataset.action === 'request-notification') {
     const r = await requestNotificationPermission();

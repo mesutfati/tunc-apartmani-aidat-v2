@@ -8,7 +8,7 @@ for (const item of ['index.html', 'styles.css', 'app.js', 'data', 'services', 'p
 mkdirSync(`${output}/vendor`, { recursive:true });
 const vendor = [
   ['node_modules/@capacitor/camera/dist/plugin.js', 'camera.js'],
-  ['node_modules/@capacitor-community/image-to-text/dist/plugin.js', 'ocr.js'],
+  ['vendor/vision.js', 'vision.js'],
   ['node_modules/@capacitor-community/bluetooth-le/dist/plugin.js', 'bluetooth-le.js'],
   ['node_modules/@e-is/capacitor-bluetooth-serial/dist/plugin.js', 'bluetooth-serial.js'],
   ['node_modules/@capacitor/local-notifications/dist/plugin.js', 'local-notifications.js'],
