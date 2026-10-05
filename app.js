@@ -26,6 +26,8 @@ let state = load(seedState);
 let priceRecords = [];
 let refuelPriceRecords = [];
 let refuelPriceType = '';
+let refuelDraftVehicleId = null;
+let refuelDraftPercent = null;
 let healthSnapshot = state.healthSnapshot || null;
 let healthReport = healthSnapshot?.connected === true ? (state.healthReport || analyzeVehicleHealth(healthSnapshot)) : null;
 let earlyWarning = state.earlyWarning || null;
@@ -109,6 +111,66 @@ function vehicleProfileDetails(profile) {
   if (!profile || profile.id === MANUAL_VEHICLE_PROFILE.id) return '<span class="muted">Model profili seçilmedi; depo ve teknik bilgileri elle girebilirsiniz.</span>';
   return `<b>${esc(profile.variant)}</b><span>${esc(profile.engine)} · ${profile.tank} L depo${profile.consumption ? ` · WLTP ${String(profile.consumption).replace('.',',')} L/100 km` : ''}</span><small>${esc(profile.sourceLabel)} · versiyon ve donanıma göre değişebilir.</small>`;
 }
+function refuelStats(vehicle, percent, records = refuelPriceRecords) {
+  const level = Math.min(100, Math.max(0, Number(percent) || 0));
+  const tank = Math.max(1, Number(vehicle?.tank) || 50);
+  const currentLiters = tank * level / 100;
+  const needed = Math.max(0, tank - currentLiters);
+  const selected = records.find(row => row.district === state.location?.district && row.live && row.price != null) || records.find(row => row.live && row.price != null);
+  const unitPrice = Number(selected?.price);
+  const profile = vehicleProfileById(vehicle?.profileId);
+  return {
+    level, tank, currentLiters, needed, selected, unitPrice, profile,
+    costText: Number.isFinite(unitPrice) && unitPrice > 0 ? money(needed * unitPrice) : 'Canlı fiyat bekleniyor',
+    priceText: Number.isFinite(unitPrice) && unitPrice > 0 ? `${money(unitPrice)}/L` : 'Fiyat bekleniyor',
+    rangeText: profile.consumption ? `${Math.round((tank / profile.consumption) * 100).toLocaleString('tr-TR')} km` : 'Model bilgisi yok'
+  };
+}
+function updateRefuelPage(percent) {
+  const vehicle = state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
+  if (!vehicle) return;
+  const stats = refuelStats(vehicle, percent);
+  refuelDraftVehicleId = vehicle.id;
+  refuelDraftPercent = stats.level;
+  const set = (name, value) => document.querySelectorAll(`[data-refuel-page-${name}]`).forEach(node => { node.textContent = value; });
+  set('percent', `${stats.level}%`);
+  set('liters', `${stats.currentLiters.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L`);
+  set('needed', `${stats.needed.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L Daha Gerekli`);
+  set('needed-short', `${stats.needed.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L`);
+  set('cost', stats.costText);
+  set('price', stats.priceText);
+  set('range', stats.rangeText);
+  set('level-label', `${stats.level}% · Depodaki Mevcut Yakıt Miktarı`);
+  const dial = document.querySelector('[data-refuel-page-dial]');
+  if (dial) dial.style.setProperty('--refuel-angle', `${stats.level * 1.8}deg`);
+}
+function openRefuelView(vehicle = null) {
+  const selectedVehicle = vehicle || state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
+  if (!selectedVehicle) { state.view = 'vehicles'; persist(); toast('Dolum hesabı için önce aracınızı ekleyin.', true); return; }
+  closeModal();
+  state.selectedVehicleId = selectedVehicle.id;
+  state.view = 'refuel';
+  refuelDraftVehicleId = selectedVehicle.id;
+  refuelDraftPercent = Number(selectedVehicle.fuelLevelPercent) || 0;
+  const key = vehicleFuelKey(selectedVehicle.fuel);
+  refuelPriceType = key;
+  refuelPriceRecords = key === state.fuelType && priceRecords.length ? priceRecords : [];
+  save(state);
+  render();
+  if (!refuelPriceRecords.length) getFuelPrices({ city:state.location.city, district:state.location.district, type:key }).then(rows => {
+    if (state.view === 'refuel' && state.selectedVehicleId === selectedVehicle.id) { refuelPriceRecords = rows; render(); }
+  }).catch(() => {});
+}
+function refuelView() {
+  const vehicle = state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
+  if (!vehicle) return `<main class="refuel-page"><div class="refuel-page-head"><button class="icon-button" data-view="vehicles" aria-label="Araçlara dön">${ico('chevron',20)}</button><div><div class="eyebrow">YAKIT</div><h2>Dolum Hesabı</h2></div></div><div class="card empty-card"><h3>Önce aracınızı ekleyin</h3><p>Model seçtiğinizde depo kapasitesi ve yakıt türü otomatik olarak hesaba katılır.</p><button class="primary-button full-button" data-action="add-vehicle">Araç ekle</button></div></main>`;
+  const initialLevel = refuelDraftVehicleId === vehicle.id && refuelDraftPercent != null ? refuelDraftPercent : vehicle.fuelLevelPercent;
+  const stats = refuelStats(vehicle, initialLevel);
+  const sourceCount = stats.selected?.sourceCount || refuelPriceRecords.meta?.sourceCount || 0;
+  const sourceText = stats.selected?.source || (sourceCount ? `${sourceCount} canlı kaynak` : 'Canlı kaynak kontrolü bekleniyor');
+  const vehicleOptions = state.vehicles.map(item => `<option value="${esc(item.id)}" ${item.id === vehicle.id ? 'selected':''}>${esc(item.brand)} ${esc(item.model)} · ${esc(item.plate)}</option>`).join('');
+  return `<main class="refuel-page"><div class="refuel-page-head"><button class="icon-button" data-view="home" aria-label="Ana sayfaya dön">${ico('chevron',20)}</button><div><div class="eyebrow">YAKIT PLANLAMA</div><h2>Dolum Hesabı</h2><p>Depoyu ne kadar doldurmalısınız?</p></div><select class="refuel-vehicle-pill" data-refuel-page-vehicle aria-label="Aktif araç">${vehicleOptions}</select></div><form data-form="refuel-page"><section class="refuel-total"><span class="eyebrow">TAM DOLUM İÇİN KALAN TUTAR</span><strong data-refuel-page-cost>${esc(stats.costText)}</strong><b class="refuel-needed-badge">${ico('fuel',16)} <span data-refuel-page-needed>${stats.needed.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L Daha Gerekli</span></b><small>Seçili konum: ${esc(state.location?.city || 'konum bekleniyor')} · ${esc(sourceText)}</small></section><section class="refuel-white-card"><div class="refuel-dial" data-refuel-page-dial style="--refuel-angle:${stats.level * 1.8}deg"><div class="refuel-dial-inner"><span>E</span><b data-refuel-page-percent>${stats.level}%</b><span>D</span></div><i class="refuel-needle"></i><strong>Depodaki Mevcut Yakıt Miktarı</strong></div><div class="refuel-chips"><span class="chip teal">${ico('fuel',13)} ${esc(vehicle.fuel)}</span><span class="chip teal">${ico('fuel',13)} ${Number(vehicle.tank || 50)} L Depo</span></div><input class="refuel-slider" type="range" min="0" max="100" step="1" name="fuelLevelPercent" data-refuel-page-slider value="${stats.level}" aria-label="Depodaki mevcut yakıt yüzdesi"><div class="refuel-slider-caption"><span>E</span><span data-refuel-page-level-label>${stats.level}% · Depodaki Mevcut Yakıt Miktarı</span><span>D</span></div><small class="refuel-hint">Depodaki yakıt miktarını ayarlayın. OBD veya araç sensörü bağlı değilse bu değer otomatik okunmaz.</small></section><section class="refuel-breakdown refuel-breakdown-light"><div><span>Depoda Mevcut Yakıt</span><b data-refuel-page-liters>${stats.currentLiters.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L</b></div><div><span>Tam Dolum İçin Gerekli Yakıt</span><b data-refuel-page-needed-short>${stats.needed.toLocaleString('tr-TR',{minimumFractionDigits:1,maximumFractionDigits:1})} L</b></div><div><span>Canlı Birim Fiyat</span><b data-refuel-page-price>${esc(stats.priceText)}</b></div><div><span>Tahmini Menzil</span><b data-refuel-page-range>${esc(stats.rangeText)}</b></div></section><section class="refuel-model-strip"><div><span class="eyebrow">MODEL PROFİLİ</span><b>${esc(vehicle.brand)} ${esc(vehicle.model)}</b><small>${esc(stats.profile.variant || 'Manuel araç profili')} · ${Number(vehicle.tank || 50)} L depo</small></div><button type="button" class="secondary-button" data-view="vehicles">Aracı değiştir</button></section><button class="primary-button full-button refuel-save-button" type="submit">Yakıt seviyesini kaydet</button></form></main>`;
+}
 function updateRefuelCalculator(percent) {
   const vehicle = state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
   if (!vehicle) return;
@@ -134,6 +196,7 @@ function refuelCalculatorModal(vehicle = null) {
   const selectedVehicle = vehicle || state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
   if (!selectedVehicle) { openModal('Dolum hesabı','Önce kendi aracınızı ekleyin.','<div class="empty-card"><p>Aracınızın modelini seçtiğinizde depo kapasitesi ve model bilgileri otomatik doldurulur.</p><button class="primary-button full-button" data-action="add-vehicle">Araç ekle</button></div>'); return; }
   state.selectedVehicleId = selectedVehicle.id;
+  const key = vehicleFuelKey(selectedVehicle.fuel);
   const profile = vehicleProfileById(selectedVehicle.profileId);
   const level = Number.isFinite(Number(selectedVehicle.fuelLevelPercent)) ? Number(selectedVehicle.fuelLevelPercent) : 0;
   const vehicleOptions = state.vehicles.map(item => `<option value="${esc(item.id)}" ${item.id === selectedVehicle.id ? 'selected':''}>${esc(item.brand)} ${esc(item.model)} · ${esc(item.plate)}</option>`).join('');
@@ -329,7 +392,7 @@ function accountView() {
 }
 async function loadNearbyStations() { nearbyStations={...nearbyStations,status:'loading',error:''}; render(); try { const [positionResult, priceResult] = await Promise.all([requestCurrentPosition(), getFuelPrices({ city:state.location.city, district:state.location.district, type:state.fuelType })]); rememberLocationResult(positionResult); if (!positionResult.ok) throw new Error(positionResult.message || 'Konum alınamadı.'); const stationResult=await getNearbyStations(positionResult); priceRecords=priceResult; const selected=priceResult.find(row=>row.live && (!state.location.district || row.district===state.location.district)) || priceResult.find(row=>row.live); const activeVehicle=state.vehicles.find(vehicle=>vehicle.id===state.selectedVehicleId); const preferredBrand=activeVehicle?.favoriteStation || ''; const preferredKey=stationBrandKey(preferredBrand); const orderedStations=preferredKey ? [...stationResult.stations].sort((a,b)=>{ const aFav=stationBrandKey(a.brand).includes(preferredKey)?0:1; const bFav=stationBrandKey(b.brand).includes(preferredKey)?0:1; return aFav-bFav || Number(a.distanceKm)-Number(b.distanceKm); }) : stationResult.stations; nearbyStations={...stationResult,stations:orderedStations,status:'ready',preferredBrand,price:selected?.price ?? null,priceUpdatedAt:priceResult.meta?.checkedAt || selected?.updatedAt || ''}; } catch(error) { nearbyStations={...nearbyStations,status:'error',error:error?.message || 'Yakındaki istasyonlar alınamadı.'}; } render(); }
 function render() {
-  app.innerHTML = `${header()}${state.view === 'home' ? homeView() : state.view === 'vehicles' ? vehiclesView() : state.view === 'journey' ? journeyView() : state.view === 'prices' ? pricesView() : accountView()}${nav()}`;
+  app.innerHTML = `${header()}${state.view === 'home' ? homeView() : state.view === 'vehicles' ? vehiclesView() : state.view === 'journey' ? journeyView() : state.view === 'prices' ? pricesView() : state.view === 'refuel' ? refuelView() : accountView()}${nav()}`;
 }
 function openModal(title, subtitle, body) {
   modalLayer.innerHTML = `<section class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><div><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>`:''}</div><button class="close-button" data-action="close" aria-label="Kapat">${ico('close',19)}</button></div>${body}</section>`;
@@ -654,7 +717,7 @@ app.addEventListener('click', async event => {
   else if (action === 'vehicle-tab') { state.vehicleTab=target.dataset.tab; persist(); }
   else if (action === 'add-vehicle') vehicleModal();
   else if (action === 'edit-vehicle') vehicleModal(state.vehicles.find(v=>v.id===target.dataset.id));
-  else if (action === 'refuel') refuelCalculatorModal(state.vehicles.find(v=>v.id===target.dataset.id));
+  else if (action === 'refuel') openRefuelView(state.vehicles.find(v=>v.id===target.dataset.id));
   else if (action === 'delete-vehicle') { state.vehicles=state.vehicles.filter(v=>v.id!==target.dataset.id); if(state.selectedVehicleId===target.dataset.id) state.selectedVehicleId=null; closeModal(); persist(); toast('Araç kaldırıldı.'); }
   else if (action === 'select-vehicle') { state.selectedVehicleId=target.dataset.id; persist(); toast('Aktif araç seçildi.'); }
   else if (action === 'receipt') { try { const r=await readReceipt(); receiptResultModal(r); } catch (error) { toast(error?.message || 'Fiş fotoğrafı alınamadı.', true); } }
@@ -698,7 +761,7 @@ modalLayer.addEventListener('click', async event => {
   if (target.dataset.action === 'copy-barcode') { await copyBarcodeValue(); return; }
   if (target.dataset.action === 'document-ocr') { await runDocumentOcr(target); return; }
   if (target.dataset.action === 'add-vehicle') { closeModal(); vehicleModal(); return; }
-  if (target.dataset.action === 'refuel') { refuelCalculatorModal(state.vehicles.find(v=>v.id===target.dataset.id)); return; }
+  if (target.dataset.action === 'refuel') { openRefuelView(state.vehicles.find(v=>v.id===target.dataset.id)); return; }
   if (target.dataset.action === 'edit-receipt') { const item=state.receipts.find(row=>row.id===target.dataset.id); if (item) receiptFormModal(item, { ocr:true, rawText:item.rawText || '', passes:item.ocrPasses || 1, message:'Kayıtlı fiş alanlarını düzenleyin.' }, item); return; }
   if (target.dataset.action === 'request-notification') {
     const r = await requestNotificationPermission();
@@ -749,6 +812,28 @@ document.addEventListener('submit', async event => {
   else if(form.dataset.form==='trip-note'){if(state.activeTrip){state.activeTrip.note=data.note.trim();save(state);closeModal();render();toast('Sürüş notu kaydedildi.');}else{closeModal();toast('Aktif sürüş bulunamadı.',true);}}
   else if(form.dataset.form==='location'){state.location={city:data.city,district:data.district};priceRecords=[];closeModal();persist();await refreshPrices();toast('Fiyat konumu güncellendi.');}
   else if(form.dataset.form==='mileage'){state.settings.mileage=Number(data.mileage)||0;closeModal();persist();toast('Kilometre güncellendi.');}
+});
+document.addEventListener('change', event => {
+  const input = event.target;
+  if (!input.matches('[data-refuel-page-vehicle]')) return;
+  const vehicle = state.vehicles.find(item => item.id === input.value);
+  if (vehicle) openRefuelView(vehicle);
+});
+document.addEventListener('input', event => {
+  if (event.target.matches('[data-refuel-page-slider]')) updateRefuelPage(event.target.value);
+});
+document.addEventListener('submit', event => {
+  const form = event.target.closest('form[data-form="refuel-page"]');
+  if (!form) return;
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(form));
+  const vehicle = state.vehicles.find(item => item.id === state.selectedVehicleId) || state.vehicles[0];
+  if (!vehicle) return;
+  vehicle.fuelLevelPercent = Math.min(100, Math.max(0, Number(data.fuelLevelPercent) || 0));
+  state.selectedVehicleId = vehicle.id;
+  save(state);
+  render();
+  toast(`Yakıt seviyesi ${vehicle.fuelLevelPercent}% olarak kaydedildi.`);
 });
 
 window.addEventListener('offline', () => { render(); toast('İnternet bağlantısı yok. Acil kayıtlar cihazda saklanabilir.', true); });
