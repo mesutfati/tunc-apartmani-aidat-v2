@@ -56,6 +56,15 @@ main { padding:20px 18px 18px; }
 	.location-notice > div:not(.notice-icon) { min-width:180px; flex:1; }
 	.location-notice > .secondary-button { margin-left:auto; }
 	.notice-card.warning { background:linear-gradient(130deg,rgba(92,70,31,.78),rgba(57,43,29,.8)); border-color:rgba(255,202,103,.35); }
+	.future-alert-card { margin-top:11px; padding:15px; border-radius:19px; background:linear-gradient(135deg,rgba(18,103,94,.9),rgba(14,65,67,.88)); border:1px solid rgba(64,219,201,.32); box-shadow:0 12px 26px rgba(4,45,53,.18); }
+	.future-alert-card.up { background:linear-gradient(135deg,rgba(99,73,34,.9),rgba(56,43,31,.9)); border-color:rgba(255,202,103,.4); }
+	.future-alert-top { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:11px; }
+	.future-confidence { color:#c7d9e1; font-size:9px; font-weight:760; text-align:right; }
+	.future-alert-card > strong { display:block; font-size:16px; line-height:1.35; letter-spacing:-.2px; }
+	.future-alert-card > p { margin:11px 0 8px; color:#c9e4e6; font-size:10px; line-height:1.5; }
+	.future-alert-card > p b { color:#f1fffc; }
+	.future-alert-card .text-button { display:flex; align-items:center; gap:3px; }
+	.future-alert-card .text-button svg { margin-top:1px; }
 .quick-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; }
 .quick-card { min-height:101px; padding:12px 9px; text-align:left; border-radius:18px; background:linear-gradient(150deg,#192942,#132239); border:1px solid var(--line); color:var(--text); transition:transform .18s ease; }
 .quick-icon { width:32px; height:32px; display:grid; place-items:center; border-radius:11px; color:var(--teal); background:var(--teal-faint); margin-bottom:10px; }

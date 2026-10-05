@@ -3,6 +3,7 @@ import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { getFuelPrices } from './services/fuel-prices.js';
 import { getEarlyWarningLive } from './services/early-warning.js';
+import { collectFuelAlerts } from './services/fuel-alert-feed.js';
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3000);
@@ -29,6 +30,12 @@ http.createServer((req, res) => {
         res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify(payload));
       })
       .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8' }); res.end(JSON.stringify({ ok:false, error:error.message })); });
+    return;
+  }
+  if (requestUrl.pathname === '/api/fuel-alerts') {
+    collectFuelAlerts()
+      .then(payload => { res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify(payload)); })
+      .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify({ alerts:[], checks:[], error:error.message })); });
     return;
   }
   const raw = decodeURIComponent((req.url || '/').split('?')[0]);

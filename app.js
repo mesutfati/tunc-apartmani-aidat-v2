@@ -12,6 +12,7 @@ import { corollaIcon } from './services/vehicle-art.js';
 import { analyzeVehicleHealth, demoHealthSnapshot, obdMetrics } from './services/health-analysis.js';
 import { connectObdClassic, readObdSnapshot, obdSourceNote, demoObdSnapshot } from './services/obd.js';
 import { FUEL_ALERT_SOURCES, alertPolicy } from './services/fuel-alerts.js';
+import { getFuelAlerts } from './services/fuel-alert-feed.js';
 import { getEarlyWarningLive, riskScore } from './services/early-warning.js';
 import { provinceCodes } from './data/province-codes.js';
 import { getNearbyStations } from './services/nearby-stations.js';
@@ -27,6 +28,9 @@ let priceRecords = [];
 let healthSnapshot = state.healthSnapshot || null;
 let healthReport = healthSnapshot?.connected === true ? (state.healthReport || analyzeVehicleHealth(healthSnapshot)) : null;
 let earlyWarning = state.earlyWarning || null;
+let futureFuelAlerts = state.futureFuelAlerts || [];
+let futureFuelAlertsStatus = state.futureFuelAlertsStatus || 'idle';
+let futureFuelAlertsCheckedAt = state.futureFuelAlertsCheckedAt || '';
 let nearbyStations = { status:'idle', stations:[], source:'', checkedAt:'', price:null, priceUpdatedAt:'' };
 let pendingDocumentDraft = null;
 let pendingBarcodeResult = null;
@@ -76,6 +80,25 @@ function locationAccessCopy() {
 }
 function parseCheckedAt(value) { const text=String(value || ''); const match=text.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})[ ,]+(\d{1,2}):(\d{2})/); if (match) return new Date(Number(match[3]), Number(match[2])-1, Number(match[1]), Number(match[4]), Number(match[5])); const date=new Date(value); return Number.isNaN(date.getTime()) ? null : date; }
 function priceFreshness(value) { const date=parseCheckedAt(value); if (!date) return { label:'Kontrol zamanı bekleniyor', tone:'muted' }; const minutes=Math.max(0, Math.round((Date.now()-date.getTime())/60000)); if (minutes <= 30) return { label:`Güncel kontrol · ${minutes} dk önce`, tone:'fresh' }; if (minutes <= 180) return { label:`Kontrol ${minutes} dk önce`, tone:'warn' }; return { label:`Eski kontrol · ${Math.round(minutes/60)} sa önce`, tone:'stale' }; }
+function amountWords(value) { const number=Number(value); if (!Number.isFinite(number)) return 'tutarı'; const whole=Math.floor(number); const kuruş=Math.round((number-whole)*100); return `${whole} lira${kuruş ? ` ${String(kuruş).padStart(2,'0')} kuruş` : ''}`; }
+function alertDateWords(value) { const match=String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!match) return value || 'belirtilen tarihten'; const months=['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık']; return `${Number(match[3])} ${months[Number(match[2])-1]} ${match[1]}`; }
+function futureAlertSentence(alert) { const product=alert.product === 'motorin' ? 'motorinin' : alert.product === 'benzin' ? 'benzinin' : 'LPG’nin'; const change=alert.direction === 'down' ? 'indirim' : 'zam'; return `${alertDateWords(alert.effectiveDate)} tarihinden itibaren ${product} litre fiyatına ${amountWords(alert.amount)} ${change} gelmesi bekleniyor.`; }
+function futureAlertCard(alert) {
+  if (futureFuelAlertsStatus === 'loading') return `<div class="notice-card future-alert-loading"><div class="notice-icon pulse">${ico('refresh',20)}</div><div><strong>Gelecek fiyat değişiklikleri kontrol ediliyor…</strong><p>Ekonomim, CNN Türk, Diken, PÜİS ve EPDK kaynaklarında ürün–tutar–tarih eşleşmesi aranıyor.</p></div></div>`;
+  if (futureFuelAlertsStatus === 'error') return `<div class="notice-card warning"><div class="notice-icon">${ico('alert',20)}</div><div><strong>Gelecek fiyat uyarısı alınamadı</strong><p>Kaynaklar okunamadı. Bu, zam veya indirim olmadığı anlamına gelmez.</p></div><button class="secondary-button" data-action="refresh-fuel-alerts">Tekrar dene</button></div>`;
+  if (!alert) return `<div class="notice-card"><div class="notice-icon">${ico('clock',20)}</div><div><strong>Doğrulanmış gelecek değişiklik bulunamadı</strong><p>Açık ürün, tutar ve yürürlük tarihi olan bir kaynak eşleşmesi yok. Uygulama tahmin uydurmaz; son kontrol: ${esc(futureFuelAlertsCheckedAt || 'bekleniyor')}.</p></div><button class="secondary-button" data-action="refresh-fuel-alerts">Kontrol et</button></div>`;
+  const tone=alert.direction === 'down' ? 'down' : 'up';
+  const sources=alert.sources?.map(source=>source.sourceName).join(' · ') || 'kaynak bilgisi yok';
+  const changeLabel=alert.direction === 'down' ? 'İNDİRİM BEKLENTİSİ' : 'ZAM BEKLENTİSİ';
+  return `<article class="future-alert-card ${tone}"><div class="future-alert-top"><span class="chip ${tone === 'down' ? 'teal':'yellow'}">${changeLabel}</span><span class="future-confidence">${esc(alert.confidence || 'Düşük')} güven · ${alert.sourceCount || 0} yayın</span></div><strong>${esc(futureAlertSentence(alert))}</strong><p><b>Kaynaklar:</b> ${esc(sources)}<br><b>Son kontrol:</b> ${esc(futureFuelAlertsCheckedAt || '—')} · <b>Durum:</b> Kesinleşmemiş beklenti</p><button class="text-button" data-action="future-alert-detail">Kaynak kanıtını gör ${ico('chevron',13)}</button></article>`;
+}
+function futureAlertDetailModal() {
+  const alert=futureFuelAlerts.find(item=>item.status==='upcoming') || futureFuelAlerts[0];
+  if (!alert) { openModal('Gelecek fiyat uyarısı','Henüz doğrulanabilir bir ürün–tutar–tarih eşleşmesi yok.','<div class="empty-card"><p>Kaynakları tekrar kontrol edin.</p></div>'); return; }
+  const sourceRows=(alert.sources || []).map(source=>`<div class="source-detail-row"><b>${esc(source.sourceName)}</b><span>${esc(source.sourceTier)} · yayın tarihi: ${esc(source.publishedAt || 'belirtilmedi')}<br>${esc(source.evidence || 'Açık kaynak metni')}</span><button class="secondary-button" data-action="open-source" data-url="${esc(source.url)}">Kaynağı aç</button></div>`).join('');
+  const checks=(state.futureFuelAlertChecks || []).map(check=>`<div class="metric-row"><span>${esc(check.name)}</span><b>${check.alertCount ? `${check.alertCount} eşleşme` : check.ok ? 'Eşleşme yok' : 'Okunamadı'}</b></div>`).join('');
+  openModal('Gelecek fiyat uyarısı kanıtı','Bu kart kesinleşmiş pompa fiyatı değildir; kaynakların yayımladığı sektör beklentisini gösterir.',`<div class="notice-card ${alert.confidence === 'Yüksek' ? '' : 'warning'}"><div class="notice-icon">${ico(alert.direction==='down'?'chart':'alert',20)}</div><div><strong>${esc(alert.confidence)} güven · ${esc(alert.confidenceNote)}</strong><p>${esc(futureAlertSentence(alert))}</p></div></div><h4 class="modal-section-title">Kaynak kanıtları</h4><div class="source-detail">${sourceRows}</div>${checks ? `<h4 class="modal-section-title">Kontrol edilen resmi/sektör kaynakları</h4><div class="metric-list">${checks}</div>` : ''}<p class="muted" style="font-size:10px;line-height:1.5;margin-top:12px">Güven derecesi; yayıncı sayısı, kaynak katmanı, ürün–tutar–yürürlük tarihinin açık olması ve resmi teyit bulunup bulunmamasına göre verilir. PÜİS/EPDK resmi eşleşmesi yoksa kart “beklenti” olarak kalır. Yürürlük tarihinden sonra güncel pompa ortalamasıyla gerçekleşme ayrıca kontrol edilmelidir.</p><button class="primary-button full-button" data-action="close">Kapat</button>`);
+}
 const locationItems = city => city === 'İstanbul' ? districts : [{ name:city }];
 const haversineKm = (a, b) => {
   if (!a || !b || !Number.isFinite(a.latitude) || !Number.isFinite(a.longitude) || !Number.isFinite(b.latitude) || !Number.isFinite(b.longitude)) return 0;
@@ -107,8 +130,10 @@ function nav() {
   return `<nav class="bottom-nav" aria-label="Alt navigasyon">${items.map(([id,label,icon]) => `<button class="nav-item ${state.view === id ? 'active':''}" data-view="${id}" aria-current="${state.view === id ? 'page':'false'}"><span class="nav-symbol">${ico(icon,20)}</span><span>${label}</span></button>`).join('')}</nav>`;
 }
 function notificationPanel() {
-  const current = state.notificationTab === 'current'; const items = current ? state.notifications.filter(n => !n.seen) : state.notifications;
-  return `<section><div class="section-head"><h3>Akaryakıt Bildirimleri</h3><button class="text-button" data-action="fuel-alert-sources">Duyuru kaynakları</button></div><div class="pill-tabs"><button data-action="notif-tab" data-tab="current" class="${current?'active':''}">Güncel</button><button data-action="notif-tab" data-tab="history" class="${!current?'active':''}">Geçmiş</button></div>${items.length ? items.slice(0,1).map(n => `<div class="notice-card"><div class="notice-icon">${ico(n.kind === 'down' ? 'chart':'bell',20)}</div><div><strong>${n.kind === 'down'?'Fiyat düşüşü doğrulandı':n.kind === 'up'?'Fiyat artışı doğrulandı':'Fiyat güncellemesi'} <span class="chip teal">${esc(n.date)}</span></strong><p>${esc(n.text)}</p></div></div>`).join('') : `<div class="notice-card"><div class="notice-icon">${ico('check',20)}</div><div><strong>Doğrulanmış uyarı yok</strong><p>Güncel fiyat ortalaması en az iki canlı kaynakla karşılaştırılmadan kesin zam veya indirim bildirimi gönderilmez.</p></div></div>`}</section>`;
+  const current = state.notificationTab === 'current';
+  const items = current ? state.notifications.filter(n => !n.seen) : state.notifications;
+  const priceHistory = items.length ? items.slice(0,1).map(n => `<div class="notice-card"><div class="notice-icon">${ico(n.kind === 'down' ? 'chart':'bell',20)}</div><div><strong>${n.kind === 'down'?'Fiyat düşüşü doğrulandı':n.kind === 'up'?'Fiyat artışı doğrulandı':'Fiyat güncellemesi'} <span class="chip teal">${esc(n.date)}</span></strong><p>${esc(n.text)}</p></div></div>`).join('') : '';
+  return `<section><div class="section-head"><h3>Akaryakıt Bildirimleri</h3><button class="text-button" data-action="fuel-alert-sources">Kaynak güveni</button></div><div class="pill-tabs"><button data-action="notif-tab" data-tab="current" class="${current?'active':''}">Güncel</button><button data-action="notif-tab" data-tab="history" class="${!current?'active':''}">Geçmiş</button></div>${current ? `${futureAlertCard(futureFuelAlerts.find(item => item.status === 'upcoming'))}${priceHistory || ''}` : `${futureFuelAlerts.filter(item => item.status === 'past').slice(0,2).map(item => `<div class="notice-card warning"><div class="notice-icon">${ico('clock',20)}</div><div><strong>Geçmiş beklenti · ${esc(item.effectiveDateLabel)}</strong><p>${esc(futureAlertSentence(item))} Gerçekleşme, sonraki canlı fiyat kontrolüyle ayrıca değerlendirilir.</p></div></div>`).join('')}${priceHistory || (!futureFuelAlerts.some(item => item.status === 'past') ? `<div class="notice-card"><div class="notice-icon">${ico('check',20)}</div><div><strong>Geçmiş bildirim yok</strong><p>Gerçekleşen fiyat değişiklikleri ve süresi geçmiş beklentiler burada tutulur.</p></div></div>` : '')}`}</section>`;
 }
 function earlyWarningPanel() {
   const result = earlyWarning?.risk;
@@ -323,7 +348,8 @@ function fuelSourceModal() {
     return `<div class="source-detail-row"><b>${esc(source.name)}</b><span>${esc(source.role)} · ${esc(statusText)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Siteyi aç</button></div>`;
   }).join('');
   const alertCards = FUEL_ALERT_SOURCES.map(source => `<div class="source-detail-row"><b>${esc(source.name)} <span class="chip ${source.level === 'Resmi kurum' || source.level === 'Resmi kayıt' ? 'teal' : 'yellow'}">${esc(source.level)}</span></b><span>${esc(source.signal)} · ${esc(source.note)}</span><button class="secondary-button" data-action="open-source" data-url="${source.url}">Duyuruları aç</button></div>`).join('');
-  openModal('Yakıt kaynakları ve zam duyuruları','Güncel fiyat ile geleceğe yönelik sektör beklentisini birbirine karıştırmadan gösterir.',`<h4 class="modal-section-title">Güncel fiyat ortalaması</h4><div class="source-detail">${sourceCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">Güncel kart; aynı yakıt türü, aynı il/ilçe kapsamı ve uyumlu kaynak tarihi bulunan erişilebilir dağıtıcı ve NSoft API değerlerini ortalar. NSoft, APK’sı incelenen Yakıt Alarmı uygulamasında kullanılan toplu API’dir; birinci taraf dağıtıcı olarak değil, ayrı veri sağlayıcısı olarak listelenir. Kaynak tarihi yoksa uydurulmaz; kontrol zamanı ayrıca yazılır. Eski tarihli bir kaynak güncel ortalamaya karıştırılmaz ve neden dışlandığı meta bilgisinde gösterilir. EPDK resmi otorite ve fiili pompa fiyatı referansıdır. Seçili ilde doğrudan satır bulunamazsa en yakın il merkezlerinin canlı verisi açıkça “çevre il referansı” olarak etiketlenir.</p><h4 class="modal-section-title">Zam/indirim duyuru kaynakları</h4><div class="source-detail">${alertCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">${esc(alertPolicy.rule)} Bu sürümde ileri tarihli haber taraması arka planda otomatik yapılmaz; kesin fiyat alarmı yalnızca yenileme sırasında iki veya daha fazla canlı fiyat kaynağındaki ölçüm değişiminden üretilir.</p>`);
+  const futureSummary = futureFuelAlerts.length ? `Son gelecek uyarı kontrolü: ${futureFuelAlertsCheckedAt || '—'} · ${futureFuelAlerts.length} eşleşme.` : `Son gelecek uyarı kontrolü: ${futureFuelAlertsCheckedAt || 'henüz yapılmadı'} · açık ürün/tutar/tarih eşleşmesi yok.`;
+  openModal('Yakıt kaynakları ve zam duyuruları','Güncel fiyat ile geleceğe yönelik sektör beklentisini birbirine karıştırmadan gösterir.',`<h4 class="modal-section-title">Güncel fiyat ortalaması</h4><div class="source-detail">${sourceCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">Güncel kart; aynı yakıt türü, aynı il/ilçe kapsamı ve uyumlu kaynak tarihi bulunan erişilebilir dağıtıcı ve NSoft API değerlerini ortalar. NSoft, APK’sı incelenen Yakıt Alarmı uygulamasında kullanılan toplu API’dir; birinci taraf dağıtıcı olarak değil, ayrı veri sağlayıcısı olarak listelenir. Kaynak tarihi yoksa uydurulmaz; kontrol zamanı ayrıca yazılır. Eski tarihli bir kaynak güncel ortalamaya karıştırılmaz ve neden dışlandığı meta bilgisinde gösterilir. EPDK resmi otorite ve fiili pompa fiyatı referansıdır. Seçili ilde doğrudan satır bulunamazsa en yakın il merkezlerinin canlı verisi açıkça “çevre il referansı” olarak etiketlenir.</p><h4 class="modal-section-title">Zam/indirim duyuru kaynakları</h4><div class="source-detail">${alertCards}</div><p class="muted" style="font-size:11px;line-height:1.5;margin:12px 2px">${esc(alertPolicy.rule)} ${esc(futureSummary)} Gelecek kartı; Ekonomim, CNN Türk, Diken, PÜİS duyuruları ve EPDK resmi fiyat sayfasını canlı kontrol eder. En az iki yayın aynı ürün, tutar ve yürürlük tarihini bildirirse “Orta güvenli beklenti” gösterilir; PÜİS/EPDK resmi teyidi yoksa kesinleşmiş indirim veya zam yazılmaz.</p>`);
 }
 function receiptFormModal(parsed = {}, meta = {}, existing = null) {
   const p = parsed || {};
@@ -461,6 +487,29 @@ async function refreshPrices() {
   const baseMessage = trusted ? `Güncellendi · kontrol ${priceRecords.meta.checkedAt || displayNow()}` : priceRecords.meta?.live && selected?.sourceCount >= 2 ? 'Birden fazla canlı kaynak okundu ancak tarih uyumu doğrulanmadı; doğrulanmış alarm oluşturulmadı.' : priceRecords.meta?.live ? 'Seçili konumda tek canlı kaynak okundu; doğrulanmış alarm oluşturulmadı.' : 'Canlı kaynak doğrulanamadı; bildirim oluşturulmadı.';
   toast(nativeNotification && !nativeNotification.ok ? `${baseMessage} Android bildirim izni kapalı.` : baseMessage, !priceRecords.meta?.live || Boolean(nativeNotification && !nativeNotification.ok));
 }
+async function refreshFutureFuelAlerts(silent = false) {
+  futureFuelAlertsStatus = 'loading';
+  state.futureFuelAlertsStatus = futureFuelAlertsStatus;
+  if (!silent) render();
+  try {
+    const payload = await getFuelAlerts();
+    futureFuelAlerts = Array.isArray(payload?.alerts) ? payload.alerts : [];
+    futureFuelAlertsCheckedAt = payload?.checkedAt || displayNow();
+    futureFuelAlertsStatus = payload?.error ? 'error' : 'ready';
+    state.futureFuelAlerts = futureFuelAlerts;
+    state.futureFuelAlertsCheckedAt = futureFuelAlertsCheckedAt;
+    state.futureFuelAlertsStatus = futureFuelAlertsStatus;
+    state.futureFuelAlertChecks = payload?.checks || [];
+    save(state);
+    render();
+  } catch (error) {
+    futureFuelAlertsStatus = 'error';
+    state.futureFuelAlertsStatus = futureFuelAlertsStatus;
+    state.futureFuelAlertsCheckedAt = displayNow();
+    save(state);
+    render();
+  }
+}
 async function recordPark() {
   const item = { id:uid('park'), title:'Mevcut park konumu', date:displayNow(), note:state.gps ? 'GPS konumu aranıyor…' : 'GPS kapalı', latitude:null, longitude:null };
   state.parks.unshift(item);
@@ -526,6 +575,8 @@ app.addEventListener('click', async event => {
   else if (action === 'request-location') await requestLocationAccess();
   else if (action === 'settings') settingsModal();
   else if (action === 'notif-tab') { state.notificationTab=target.dataset.tab; persist(); }
+  else if (action === 'future-alert-detail') futureAlertDetailModal();
+  else if (action === 'refresh-fuel-alerts') await refreshFutureFuelAlerts();
   else if (action === 'notifications') { openModal('Akaryakıt bildirimleri','Yalnızca canlı kaynak karşılaştırmaları burada görünür.',`<div class="card list-card">${state.notifications.length ? state.notifications.map(n=>listRow({icon:n.kind==='down'?'chart':'bell',title:n.kind==='down'?'Fiyat düşüşü doğrulandı':n.kind==='up'?'Fiyat artışı doğrulandı':'Fiyat güncellemesi',subtitle:n.text,end:n.date})).join('') : '<div class="empty-card"><p>Henüz canlı kaynakla doğrulanmış fiyat değişikliği yok.</p></div>'}</div>`); }
   else if (action === 'early-warning') await earlyWarningModal();
   else if (action === 'fuel-alert-sources') fuelSourceModal();
@@ -559,8 +610,8 @@ app.addEventListener('click', async event => {
   else if (action === 'report') reportModal();
   else if (action === 'obd' || action === 'health-detail') action === 'obd' ? obdModal() : healthDetailModal();
   else if (action === 'location') locationModal();
-  else if (action === 'fuel') { state.fuelType=target.dataset.fuel; await refreshPrices(); }
-  else if (action === 'refresh-prices') await refreshPrices();
+  else if (action === 'fuel') { state.fuelType=target.dataset.fuel; await refreshPrices(); await refreshFutureFuelAlerts(true); }
+  else if (action === 'refresh-prices') { await refreshPrices(); await refreshFutureFuelAlerts(true); }
   else if (action === 'nearby-stations') await loadNearbyStations();
   else if (action === 'fuel-source') fuelSourceModal();
   else if (action === 'favorites-filter') { state.pricesOnlyFavorites=!state.pricesOnlyFavorites; persist(); }
@@ -573,7 +624,7 @@ app.addEventListener('click', async event => {
   else if (action === 'notification-settings') notificationSettingsModal();
   else if (action === 'motion-settings') { state.settings.motionTracking=!state.settings.motionTracking; persist(); toast(`Arka plan sürüş kaydı demo modu ${state.settings.motionTracking?'açık':'kapalı'}.`); }
   else if (action === 'request-notification') { const r=await requestNotificationPermission(); toast(r.message,!r.ok); }
-  else if (action === 'reset') { if(confirm('Tüm kayıtlar bu cihazdan silinsin mi?')) { state=reset(seedState); priceRecords=[]; healthSnapshot=null; healthReport=null; persist(); toast('Kayıtlar sıfırlandı.'); } }
+  else if (action === 'reset') { if(confirm('Tüm kayıtlar bu cihazdan silinsin mi?')) { state=reset(seedState); priceRecords=[]; futureFuelAlerts=[]; futureFuelAlertsStatus='idle'; futureFuelAlertsCheckedAt=''; healthSnapshot=null; healthReport=null; persist(); toast('Kayıtlar sıfırlandı.'); } }
 });
 modalLayer.addEventListener('click', async event => {
   const target = event.target.closest('[data-action]');
@@ -637,5 +688,6 @@ window.addEventListener('offline', () => { render(); toast('İnternet bağlantı
 window.addEventListener('online', () => { render(); toast('İnternet bağlantısı geri geldi.'); });
 getFuelPrices({ city:state.location.city, type:state.fuelType }).then(rows => { priceRecords=rows; render(); }).catch(()=>render());
 render();
+refreshFutureFuelAlerts(true);
 if(state.activeTrip) tripClock();
 initializeLocationAccess().catch(error => { rememberLocationResult({ ok:false, status:'unavailable', permission:'unknown', message:error?.message || 'Konum erişimi başlatılamadı.' }); render(); locationAccessModal(); });
