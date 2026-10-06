@@ -471,3 +471,153 @@ html[data-font-scale="xlarge"] #toastStack {
   font-size:12px;
   font-weight:800;
 }
+
+/* Sürüş ve park geçmişi: tek satırlık liste yerine düzenle/sil eylemleri görünür kartlarda. */
+.history-list { display:grid; gap:10px; }
+.history-record {
+  padding:14px;
+  border:1px solid rgba(91,184,255,.18);
+  border-radius:18px;
+  background:linear-gradient(140deg,rgba(26,48,78,.94),rgba(29,28,63,.96));
+  box-shadow:0 10px 22px rgba(2,8,25,.18),inset 0 0 0 1px rgba(255,255,255,.025);
+}
+.history-record-head { display:flex; align-items:flex-start; gap:10px; min-width:0; }
+.history-record-head > div { min-width:0; flex:1; }
+.history-record-head b,
+.history-record-head small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.history-record-head b { color:#f2fbff; font-size:13px; }
+.history-record-head small { margin-top:4px; color:#a8c4dc; font-size:10px; }
+.history-record > p { margin:10px 0 0; color:#c2d8e8; font-size:11px; line-height:1.45; }
+.history-actions { display:flex; flex-wrap:wrap; gap:7px; margin-top:12px; }
+.history-actions .secondary-button,
+.history-actions .danger-button { min-height:36px; padding:0 11px; font-size:10px; }
+.history-actions .danger-button { color:#ffd1d9; border:1px solid rgba(255,120,145,.3); background:rgba(127,36,65,.35); }
+.auto-park-card {
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr);
+  gap:10px;
+  margin:12px 0;
+  padding:14px;
+  border:1px solid rgba(255,210,112,.42);
+  border-radius:19px;
+  background:linear-gradient(135deg,rgba(101,74,36,.92),rgba(49,43,77,.96));
+  box-shadow:0 12px 26px rgba(7,10,30,.23),inset 0 0 0 1px rgba(255,255,255,.04);
+}
+.auto-park-icon { display:grid; place-items:center; width:40px; height:40px; border-radius:14px; color:#ffe6a4; background:rgba(255,204,111,.16); }
+.auto-park-copy { min-width:0; }
+.auto-park-copy b,
+.auto-park-copy span { display:block; }
+.auto-park-copy b { color:#fff2c9; font-size:13px; }
+.auto-park-copy span { margin-top:4px; color:#f4dca4; font-size:10px; line-height:1.35; }
+.auto-park-actions { grid-column:1 / -1; display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.auto-park-actions button { min-height:40px; font-size:11px; }
+.auto-park-actions .primary-button { background:linear-gradient(135deg,#ffd56e,#f39b58); color:#382716; box-shadow:0 8px 18px rgba(255,184,86,.2); }
+.park-gps-box { display:flex; align-items:center; gap:9px; margin:12px 0; padding:11px; border:1px solid rgba(32,210,189,.24); border-radius:15px; background:rgba(15,47,66,.62); }
+.park-gps-box > div { min-width:0; flex:1; }
+.park-gps-box b,
+.park-gps-box small { display:block; }
+.park-gps-box b { color:#e7fffb; font-size:10px; line-height:1.35; }
+.park-gps-box small { margin-top:3px; color:#9fc5d4; font-size:9px; line-height:1.35; }
+.park-gps-box .secondary-button { flex:none; min-height:34px; padding:0 9px; font-size:9px; }
+@media (max-width:390px) {
+  .auto-park-actions { grid-template-columns:1fr; }
+  .park-gps-box { align-items:flex-start; flex-wrap:wrap; }
+  .park-gps-box .secondary-button { margin-left:48px; }
+}
+
+.priority-home-card {
+  position:relative;
+  overflow:hidden;
+  margin:14px 0;
+  padding:15px;
+  border:1px solid rgba(77,224,205,.28);
+  border-radius:22px;
+  background:linear-gradient(135deg,rgba(15,74,82,.96),rgba(30,40,83,.98));
+  box-shadow:0 14px 30px rgba(1,8,26,.22),inset 0 0 0 1px rgba(255,255,255,.035);
+}
+.priority-home-card::after { content:''; position:absolute; width:130px; height:130px; right:-48px; bottom:-60px; border-radius:50%; background:rgba(71,221,204,.12); filter:blur(2px); pointer-events:none; }
+.priority-home-card.priority-coral { border-color:rgba(255,126,145,.34); background:linear-gradient(135deg,rgba(91,37,66,.97),rgba(38,37,78,.98)); }
+.priority-home-card.priority-yellow { border-color:rgba(255,211,109,.34); background:linear-gradient(135deg,rgba(91,68,32,.97),rgba(42,41,78,.98)); }
+.priority-home-card.priority-blue { border-color:rgba(96,185,255,.28); background:linear-gradient(135deg,rgba(25,58,91,.97),rgba(33,35,78,.98)); }
+.priority-card-head { position:relative; z-index:1; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.priority-card-head .eyebrow { margin:0; color:#b8fff4; font-size:9px; letter-spacing:.13em; }
+.priority-coral .priority-card-head .eyebrow { color:#ffd0d8; }
+.priority-yellow .priority-card-head .eyebrow { color:#ffe7aa; }
+.priority-pin { display:inline-flex; align-items:center; gap:4px; min-height:30px; padding:0 9px; border:1px solid rgba(255,255,255,.17); border-radius:999px; color:#d4ebf2; background:rgba(6,22,45,.28); font-size:10px; font-weight:800; }
+.priority-pin.active { color:#1c343d; border-color:#b3fff2; background:#b3fff2; }
+.priority-card-main { position:relative; z-index:1; display:flex; align-items:flex-start; gap:11px; margin-top:14px; }
+.priority-card-icon { display:grid; place-items:center; flex:none; width:44px; height:44px; border-radius:15px; color:#b8fff4; background:rgba(69,225,207,.17); }
+.priority-coral .priority-card-icon { color:#ffd2d9; background:rgba(255,123,143,.16); }
+.priority-yellow .priority-card-icon { color:#ffe4a4; background:rgba(255,205,105,.16); }
+.priority-card-main > div { min-width:0; }
+.priority-card-main h3 { margin:0; color:#f2fffd; font-size:16px; line-height:1.18; letter-spacing:-.02em; }
+.priority-card-main p { margin:7px 0 0; color:#c5dbe4; font-size:11px; line-height:1.45; }
+.priority-card-foot { position:relative; z-index:1; display:flex; align-items:center; gap:10px; margin-top:14px; }
+.priority-card-cta { display:inline-flex; align-items:center; gap:5px; min-height:36px; padding:0 11px; border:0; border-radius:12px; color:#10363c; background:#b5fff1; font-size:10px; font-weight:900; }
+.priority-coral .priority-card-cta { color:#4d2631; background:#ffd2d9; }
+.priority-yellow .priority-card-cta { color:#4a3519; background:#ffe2a0; }
+.priority-card-foot small { color:#a9cbd5; font-size:9px; line-height:1.3; }
+@media (max-width:390px) {
+  .priority-card-foot { align-items:flex-start; flex-direction:column; }
+  .priority-card-cta { width:100%; justify-content:center; }
+}
+
+/* Resmi araç kataloğu: kategori başlıkları, arama ve model ipuçları. */
+.catalog-search { position:sticky; top:0; z-index:2; padding:4px 0 12px; background:linear-gradient(180deg,var(--surface) 78%,transparent); }
+.catalog-search input { width:100%; min-height:44px; padding:0 14px; border:1px solid rgba(69,225,207,.3); border-radius:14px; color:var(--text); background:#0c1730; outline:none; }
+.catalog-search input:focus { border-color:#4de0cd; box-shadow:0 0 0 3px rgba(77,224,205,.12); }
+.catalog-section { margin:14px 0 18px; }
+.catalog-section .section-head { margin:0 2px 8px; }
+.catalog-section .section-head h3 { font-size:14px; }
+.catalog-row { width:100%; text-align:left; margin:7px 0; }
+.catalog-row[hidden] { display:none; }
+.catalog-row .row-icon { color:#79f2df; background:rgba(69,225,207,.11); }
+.catalog-add-label { flex:none; margin-left:auto; color:#7ff4e2; font-size:10px; font-weight:900; }
+.vehicle-tip { color:#c7e7ef !important; line-height:1.45; }
+.vehicle-tip strong { color:#8ff8e7; }
+.profile-source-link { display:inline-block; margin-top:7px; color:#86f7e6; font-size:10px; font-weight:800; text-decoration:none; }
+.profile-source-link:hover { text-decoration:underline; }
+
+/* Ortak premium görünüm: kartlarda katman, ışık kenarı ve dokunma derinliği. */
+.card, .hero-card, .quick-card, .mini-stat, .notice-card, .nearby-discovery, .future-alert-card, .priority-home-card, .vehicle-card, .history-record, .refuel-dial-card, .refuel-summary-card, .refuel-profile-card {
+  position:relative;
+  transform-style:preserve-3d;
+  box-shadow:0 18px 28px rgba(1,7,24,.22), 0 3px 0 rgba(255,255,255,.035), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.card::after, .hero-card::after, .quick-card::after, .mini-stat::after, .notice-card::after, .nearby-discovery::after, .future-alert-card::after, .priority-home-card::after, .vehicle-card::after, .history-record::after, .refuel-dial-card::after, .refuel-summary-card::after, .refuel-profile-card::after {
+  content:"";
+  position:absolute;
+  inset:1px;
+  z-index:0;
+  border-radius:inherit;
+  pointer-events:none;
+  background:linear-gradient(135deg,rgba(255,255,255,.12),transparent 35%,rgba(0,0,0,.1) 78%);
+  opacity:.6;
+}
+.card > *, .hero-card > *, .quick-card > *, .mini-stat > *, .notice-card > *, .nearby-discovery > *, .future-alert-card > *, .priority-home-card > *, .vehicle-card > *, .history-record > *, .refuel-dial-card > *, .refuel-summary-card > *, .refuel-profile-card > * { position:relative; z-index:1; }
+@media (hover:hover) {
+  .card:hover, .quick-card:hover, .vehicle-card:hover, .history-record:hover { transform:translateY(-2px) rotateX(.45deg); transition:transform .18s ease, box-shadow .18s ease; box-shadow:0 23px 34px rgba(1,7,24,.3), 0 4px 0 rgba(255,255,255,.04), inset 0 1px 0 rgba(255,255,255,.1); }
+}
+.card:active, .quick-card:active, .vehicle-card:active, .history-record:active { transform:translateY(1px) scale(.995); }
+.theme-setting { display:flex; align-items:center; gap:12px; padding:14px 0; border-bottom:1px solid var(--line); }
+.theme-setting > div { min-width:0; flex:1; }
+.theme-setting b, .theme-setting span { display:block; }
+.theme-setting b { font-size:13px; }
+.theme-setting span { margin-top:3px; color:var(--muted); font-size:10px; line-height:1.35; }
+.theme-setting select { min-width:154px; min-height:40px; border-radius:12px; border:1px solid rgba(32,210,189,.28); padding:0 9px; color:var(--text); background:#0c1730; font-size:11px; font-weight:800; }
+/* Tema seçenekleri; kontrast renkleri var(--teal) üzerinden tüm kart ve butonlara akar. */
+html[data-theme="sunset"] { --bg:#180f19; --surface:#2a1b2b; --surface-2:#382238; --surface-3:#211326; --line:rgba(255,205,184,.18); --text:#fff8f4; --muted:#d0b2aa; --muted-2:#a88883; --teal:#ff987b; --teal-deep:#b24d43; --teal-faint:rgba(255,152,123,.14); --coral:#ff758f; --yellow:#ffd27a; }
+html[data-theme="violet"] { --bg:#0e0d23; --surface:#1e1b40; --surface-2:#292557; --surface-3:#161532; --line:rgba(205,191,255,.18); --text:#f8f5ff; --muted:#b9b0d7; --muted-2:#8c82ac; --teal:#bca4ff; --teal-deep:#6a4fb4; --teal-faint:rgba(188,164,255,.14); --coral:#ff8fb3; --yellow:#f6d47c; }
+html[data-theme="contrast"] { --bg:#000; --surface:#111; --surface-2:#1b1b1b; --surface-3:#050505; --line:rgba(255,255,255,.52); --text:#fff; --muted:#f0f0f0; --muted-2:#cfcfcf; --teal:#62fff0; --teal-deep:#00a995; --teal-faint:rgba(98,255,240,.18); --coral:#ff8e9f; --yellow:#ffe26d; }
+html[data-theme="sunset"] body { background:radial-gradient(65% 40% at 14% 0%,rgba(255,121,100,.2),transparent 64%),var(--bg); }
+html[data-theme="violet"] body { background:radial-gradient(65% 40% at 14% 0%,rgba(151,119,255,.22),transparent 64%),var(--bg); }
+html[data-theme="contrast"] body { background:var(--bg); }
+html[data-theme="sunset"] .topbar { background:linear-gradient(100deg,rgba(142,58,63,.94),rgba(54,28,51,.96)); }
+html[data-theme="violet"] .topbar { background:linear-gradient(100deg,rgba(77,60,145,.94),rgba(27,25,64,.96)); }
+html[data-theme="contrast"] .topbar { background:#000; border-bottom:2px solid var(--teal); }
+html[data-theme="sunset"] .primary-button { background:linear-gradient(135deg,#ffc09e,#ff806f); color:#3c1516; }
+html[data-theme="violet"] .primary-button { background:linear-gradient(135deg,#d7c8ff,#9e83ff); color:#201746; }
+html[data-theme="contrast"] .primary-button { background:var(--teal); color:#000; box-shadow:0 0 0 2px #000,0 0 0 4px var(--teal); }
+html[data-theme="sunset"] .hero-card { background:linear-gradient(126deg,#8f4c50 0%,#713c58 42%,#2f1e39 100%); }
+html[data-theme="violet"] .hero-card { background:linear-gradient(126deg,#5b4ba1 0%,#40356f 42%,#191b42 100%); }
+html[data-theme="contrast"] .hero-card { background:#111; border:2px solid var(--teal); }

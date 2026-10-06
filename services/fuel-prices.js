@@ -192,7 +192,7 @@ async function fetchResource(url) {
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller ? setTimeout(() => controller.abort(), 18000) : null;
   try {
-    const response = await fetch(url, { cache:'no-store', signal:controller?.signal, headers:{ 'User-Agent':'YakitAlarmi/1.0 live-price-reader' } });
+    const response = await fetch(url, { cache:'no-store', signal:controller?.signal, headers:{ 'User-Agent':'SurusCepte/1.1.0 live-price-reader' } });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return { text: await response.text(), lastModified: response.headers.get('last-modified'), checkedAt: formatDateTime() };
   } finally { if (timer) clearTimeout(timer); }
@@ -223,7 +223,7 @@ async function loadProviders(city, type = 'benzin') {
       try {
         const cityCode=provinceCodes[city];
         if(!cityCode) throw new Error('NSoft için seçili ilin plaka kodu bulunamadı');
-        const response=await fetch(`https://api.nsoft.com.tr/fuel/prices?city=${encodeURIComponent(cityCode)}`,{cache:'no-store',signal:controller?.signal,headers:{Accept:'application/json','X-Api-Key':key,'User-Agent':'YakitAlarmi/1.0 live-price-reader'}});
+        const response=await fetch(`https://api.nsoft.com.tr/fuel/prices?city=${encodeURIComponent(cityCode)}`,{cache:'no-store',signal:controller?.signal,headers:{Accept:'application/json','X-Api-Key':key,'User-Agent':'SurusCepte/1.1.0 live-price-reader'}});
         if(!response.ok) throw new Error(`HTTP ${response.status}`);
         const payload=await response.json();
         if(payload?.success!==true) throw new Error(payload?.error || 'NSoft API başarısız yanıt verdi');

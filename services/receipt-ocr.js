@@ -110,7 +110,7 @@ function labeledText(lines, patterns) {
 }
 
 function fuelType(value) {
-  const line = String(value || '');
+  const line = noDiacritics(value);
   return FUEL_PATTERNS.find(([, pattern]) => pattern.test(line))?.[0] || '';
 }
 
@@ -173,7 +173,7 @@ function parseReceiptText(rawText = '') {
   const amount = structuredNumber('amount','total','totalAmount') ?? total ?? (amountCandidates.length ? Math.max(...amountCandidates) : null);
   const liters = structuredNumber('liters','litres','volume') ?? labeledNumber(lines, /(?:litre|liter|miktar|quantity|volume|sat[iı]lan\s*miktar)/i) ?? items.find(item => item.liters != null)?.liters ?? null;
   const unitPrice = structuredNumber('unitPrice','unit_price','pricePerLiter') ?? labeledNumber(lines, /(?:birim\s*fiyat|fiyat\s*\/\s*l|tl\s*\/\s*l|unit\s*price|litre\s*fiyat[iı])/i) ?? items.find(item => item.unitPrice != null)?.unitPrice ?? null;
-  const plateMatch = text.match(/\b\d{2}\s?[A-ZÇĞİÖŞÜ]{1,3}\s?\d{2,4}\b/i);
+  const plateMatch = lines.map(line => line.match(/\b\d{2}\s?[A-ZÇĞİÖŞÜ]{1,3}\s?\d{2,4}\b/i)).find(Boolean);
   const receiptNo = structured?.receiptNo || structured?.receipt || labeledText(lines, /(?:fiş\s*no|fis\s*no|belge\s*no|receipt\s*no|document\s*no|z\s*no)\s*[:#№-]?/i);
   const transactionNo = structured?.transactionNo || structured?.transaction || labeledText(lines, /(?:işlem\s*no|islem\s*no|transaction\s*no|referans\s*no|ref\s*no)\s*[:#№-]?/i);
   const pumpNo = structured?.pumpNo || structured?.pump || labeledText(lines, /(?:pompa|pump|tabanca)\s*(?:no|numaras[iı])?\s*[:#№-]?/i);

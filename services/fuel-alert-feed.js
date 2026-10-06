@@ -28,6 +28,15 @@ function publishedDate(text) {
   return parseDate(match?.[1]);
 }
 function effectiveDate(text, fallbackYear) {
+  const monthPattern = '(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)';
+  const datePattern = new RegExp(`((?:\\d{1,2}\\s+)?${monthPattern}\\s+20\\d{2}|\\d{1,2}\\s+${monthPattern})`, 'gi');
+  const cuePattern = /(?:geçerli|itibaren|yansı|başlayan)/gi;
+  const dates = [...String(text || '').matchAll(datePattern)].map(match => ({ raw:match[1], index:match.index ?? 0, value:parseDate(match[1], fallbackYear) })).filter(item => item.value);
+  const cues = [...String(text || '').matchAll(cuePattern)];
+  for (const cue of cues) {
+    const nearby = dates.filter(item => Math.abs(item.index - (cue.index ?? 0)) <= 130).sort((a, b) => Math.abs(a.index - (cue.index ?? 0)) - Math.abs(b.index - (cue.index ?? 0)));
+    if (nearby[0]) return nearby[0].value;
+  }
   const patterns = [
     /((?:\d{1,2}\s+)?(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)\s+20\d{2}|\d{1,2}\s+(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık))[^.]{0,100}(?:geçerli|itibaren|yansı|başlayan)/i,
     /(?:geçerli|itibaren|yansı|başlayan)[^.]{0,100}?((?:\d{1,2}\s+)?(?:Ocak|Şubat|Mart|Nisan|Mayıs|Haziran|Temmuz|Ağustos|Eylül|Ekim|Kasım|Aralık)(?:\s+20\d{2})?)/i,
@@ -40,9 +49,10 @@ function effectiveDate(text, fallbackYear) {
   return null;
 }
 function productOf(text) {
-  if (/\b(?:motorin\w*|mazot\w*|diesel)\b/i.test(text)) return 'motorin';
-  if (/\b(?:benzin\w*|kurşunsuz\w*|gasoline)\b/i.test(text)) return 'benzin';
-  if (/\b(?:lpg|otogaz\w*)\b/i.test(text)) return 'lpg';
+  const matchText = String(text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (/\b(?:motorin\w*|mazot\w*|diesel)\b/i.test(matchText)) return 'motorin';
+  if (/\b(?:benzin\w*|kursunsuz\w*|gasoline)\b/i.test(matchText)) return 'benzin';
+  if (/\b(?:lpg|otogaz\w*)\b/i.test(matchText)) return 'lpg';
   return null;
 }
 function directionOf(text) {
@@ -108,7 +118,7 @@ async function fetchText(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    const response = await fetch(url, { cache:'no-store', signal:controller.signal, headers:{ Accept:'text/html', 'User-Agent':'SurusCepte/1.0 fuel-alert-verifier' } });
+    const response = await fetch(url, { cache:'no-store', signal:controller.signal, headers:{ Accept:'text/html', 'User-Agent':'SurusCepte/1.1.0 fuel-alert-verifier' } });
     const text = await response.text();
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return text;

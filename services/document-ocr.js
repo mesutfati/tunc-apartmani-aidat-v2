@@ -11,13 +11,14 @@ const unique = values => [...new Set(values.filter(Boolean))];
 
 function parseDocumentText(rawText = '', type = 'insurance') {
   const text = normalizeText(rawText);
+  const matchText = text.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   const lines = String(rawText || '').split(/\r?\n/).map(normalizeText).filter(Boolean);
   const dates = unique([...text.matchAll(/\b\d{1,2}[./-]\d{1,2}[./-]\d{4}\b/g)].map(match => toIsoDate(match[0])));
   const phones = unique([...text.matchAll(/\b(?:\+90|0)?\s*(?:5\d{2}|850)[\s.-]?\d{3}[\s.-]?\d{2}[\s.-]?\d{2}\b/g)].map(match => normalizeText(match[0])));
   const plates = unique([...text.matchAll(/\b\d{2}\s?[A-ZÇĞİÖŞÜ]{1,3}\s?\d{2,4}\b/gi)].map(match => normalizeText(match[0]).toLocaleUpperCase('tr-TR')));
   const policyMatch = text.match(/(?:poli[cç]e|pol[iı]çe|poli[cç]e\s*no|s[oö]zle[sş]me\s*no)\s*[:#№-]?\s*([A-Z0-9][A-Z0-9./-]{4,})/i);
   const knownProviders = ['Allianz','Aksigorta','Anadolu Sigorta','Mapfre','Türkiye Sigorta','Sompo','Ray Sigorta','HDI','Quick Sigorta','Doğa Sigorta','Neova','Generali','Bereket','Corpus','Zurich','Koru'];
-  const provider = knownProviders.find(name => new RegExp(name.replace(' ', '\\s+'), 'i').test(text)) || lines.find(line => /sigorta|insurance/i.test(line) && line.length < 80) || '';
+  const provider = knownProviders.find(name => new RegExp(name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(' ', '\\s+'), 'i').test(matchText)) || lines.find(line => /sigorta|insurance/i.test(line.normalize('NFD').replace(/[\u0300-\u036f]/g, '')) && line.length < 80) || '';
   const result = {
     rawText: text,
     provider: normalizeText(provider.replace(/^(sigorta|insurance)\s*[:.-]?\s*/i, '')),
