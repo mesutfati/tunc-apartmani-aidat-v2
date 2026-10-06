@@ -665,3 +665,46 @@ html[data-theme="contrast"] .hero-card { background:#111; border:2px solid var(-
 .vehicle-knowledge-links { display:grid; gap:5px; margin-top:8px; }
 .vehicle-knowledge-links a { display:flex; align-items:center; justify-content:space-between; gap:5px; min-height:29px; padding:0 8px; border:1px solid rgba(255,214,124,.15); border-radius:9px; color:#d9fff7; background:rgba(8,25,48,.28); font-size:9px; font-weight:800; text-decoration:none; }
 .vehicle-knowledge-links a:hover { border-color:rgba(255,214,124,.45); color:#ffe4a3; }
+
+.vehicle-insight-card { margin:-2px 0 14px; padding:14px; border:1px solid rgba(69,225,207,.24); border-radius:18px; background:linear-gradient(145deg,rgba(20,57,73,.7),rgba(25,30,65,.86)); box-shadow:0 10px 24px rgba(2,9,28,.16); }
+.vehicle-insight-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.vehicle-insight-head b { display:block; margin-top:4px; color:#eafffb; font-size:13px; }
+.vehicle-insight-head .text-button { flex:none; font-size:10px; }
+.vehicle-tip.prominent { display:grid; gap:4px; margin-top:12px; padding:11px 12px; border-left:3px solid #7ff4e2; border-radius:12px; background:rgba(6,28,46,.48); }
+.vehicle-tip.prominent strong { color:#9ffff0; font-size:10px; }
+.vehicle-tip.prominent span { color:#d7edf0; font-size:11px; line-height:1.45; }
+.vehicle-online-status { display:flex; align-items:flex-start; gap:8px; margin-top:10px; padding:10px 11px; border:1px solid rgba(255,214,124,.2); border-radius:12px; background:rgba(73,58,31,.25); }
+.vehicle-online-status.warning { border-color:rgba(255,123,116,.28); background:rgba(90,33,40,.22); }
+.vehicle-online-status > div { min-width:0; display:grid; gap:2px; }
+.vehicle-online-status b { color:#ffe4a3; font-size:10px; }
+.vehicle-online-status span { color:#d3e4e8; font-size:10px; line-height:1.4; }
+.vehicle-online-status small, .vehicle-insight-source { color:#9fb9c6; font-size:9px; line-height:1.4; }
+.status-dot { width:8px; height:8px; flex:none; margin-top:3px; border-radius:50%; background:#ffd67b; box-shadow:0 0 0 3px rgba(255,214,123,.12); }
+.status-dot.ok { background:#64eed7; box-shadow:0 0 0 3px rgba(100,238,215,.12); }
+.vehicle-insight-source { display:block; margin-top:9px; }
+.vehicle-insight-card > .profile-source-link { display:inline-block; margin-top:7px; }
+.online-empty { margin:14px 0; }
+.catalog-manual-fallback { margin:12px 0 18px; text-align:center; }
+
+
+/* Vehicle catalog: search-first and brand-led navigation */
+.catalog-qr-cta { display:flex; align-items:center; gap:14px; padding:16px; margin:0 0 14px; border:1px solid rgba(49,220,200,.34); border-radius:20px; background:linear-gradient(135deg,rgba(22,164,156,.24),rgba(55,87,178,.25)); box-shadow:0 12px 28px rgba(0,0,0,.18),inset 0 1px 0 rgba(255,255,255,.1); }
+.catalog-qr-cta > div { flex:1; min-width:0; }
+.catalog-qr-cta b,.catalog-qr-cta span { display:block; }
+.catalog-qr-cta b { color:var(--text); font-size:15px; }
+.catalog-qr-cta span { margin-top:5px; color:var(--muted); font-size:11px; line-height:1.4; }
+.catalog-qr-cta .primary-button { flex:0 0 auto; min-height:42px; padding:0 13px; white-space:nowrap; }
+.catalog-search { position:sticky; top:-1px; z-index:2; padding:8px 0 10px; background:var(--bg); }
+.catalog-search input { min-height:50px; border-color:rgba(42,219,199,.48); box-shadow:0 8px 22px rgba(0,0,0,.16); }
+.catalog-type-filters { display:flex; gap:8px; overflow-x:auto; padding:4px 0 15px; scrollbar-width:none; }
+.catalog-type-filters::-webkit-scrollbar { display:none; }
+.catalog-type-filters .chip { cursor:pointer; border:1px solid rgba(165,192,214,.22); background:rgba(255,255,255,.05); white-space:nowrap; }
+.catalog-type-filters .chip.teal { border-color:rgba(35,225,202,.72); background:rgba(35,225,202,.2); color:#83fff0; }
+.catalog-brand-group { margin:9px 0 14px; }
+.catalog-brand-heading { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px 7px; color:#8ffbed; text-transform:uppercase; letter-spacing:.08em; font-size:12px; font-weight:800; }
+.catalog-brand-heading small { color:var(--muted); font-size:10px; font-weight:600; letter-spacing:0; text-transform:none; }
+.catalog-brand-group .catalog-row { margin:6px 0; }
+.online-vehicle-panel { margin:14px 0 18px; padding:14px; border:1px solid rgba(116,145,195,.36); border-radius:20px; background:linear-gradient(145deg,rgba(30,55,90,.72),rgba(19,35,66,.9)); }
+.online-vehicle-panel .section-head { margin-top:0; }
+.catalog-row .row-main small { display:block; margin-top:3px; color:var(--muted); font-size:10px; line-height:1.3; }
+@media (max-width:480px) { .catalog-qr-cta { align-items:stretch; flex-direction:column; } .catalog-qr-cta .primary-button { width:100%; } }

@@ -69,13 +69,30 @@ async function searchVpic(query) {
   const model = normal(query.model);
   const year = Number(query.year);
   if (!make) throw new Error('Çevrimiçi arama için marka girin.');
-  const url = year >= 1886 && year <= 2100
-    ? `${VPIC_BASE}/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}?format=json`
-    : `${VPIC_BASE}/GetModelsForMake/make/${encodeURIComponent(make)}?format=json`;
-  const payload = await fetchJson(url);
+  const hasRequestedYear = year >= 1886 && year <= 2100;
+  const lookupYear = hasRequestedYear ? year : currentYear;
+  const yearUrl = `${VPIC_BASE}/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${lookupYear}?format=json`;
+  let payload;
+  let resultQuery = query;
+  try {
+    payload = await fetchJson(yearUrl);
+  } catch (error) {
+    if (!hasRequestedYear) throw error;
+    payload = await fetchJson(`${VPIC_BASE}/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${currentYear}?format=json`);
+    resultQuery = { ...query, year:'' };
+  }
   const results = Array.isArray(payload.Results) ? payload.Results : [];
-  const filtered = model ? results.filter(item => normal(item.Model_Name).includes(model)) : results;
-  return dedupe(filtered.slice(0, 60).map(item => mapResult(item, query))).slice(0, 24);
+  const makeToken = normal(make).replace(/[^a-z0-9çğıöşü]+/gi, ' ').trim();
+  const modelTokens = model
+    .replace(makeToken, ' ')
+    .split(/[^a-z0-9çğıöşü]+/i)
+    .filter(token => token.length >= 2 && !['sedan', 'hatchback', 'hybrid', 'suv', 'wagon', 'touring'].includes(token));
+  const filtered = model ? results.filter(item => {
+    const candidate = normal(item.Model_Name);
+    if (candidate.includes(model)) return true;
+    return modelTokens.length > 0 && modelTokens.some(token => candidate.includes(token));
+  }) : results;
+  return dedupe(filtered.slice(0, 60).map(item => mapResult(item, resultQuery))).slice(0, 24);
 }
 
 export async function searchOnlineVehicleCatalog(query = {}, options = {}) {

@@ -5,9 +5,9 @@ import { FUEL_SOURCES } from './services/fuel-prices.js';
 import { requestCurrentPosition, checkLocationPermission, openLocationSettings } from './services/gps.js';
 import { requestNotificationPermission, scheduleFuelNotification, scheduleCareReminder } from './services/notifications.js';
 import { readReceipt, parseReceiptText } from './services/receipt-ocr.js';
-import { scanBarcode } from './services/barcode.js';
+import { scanBarcode, parseVehicleRegistrationQr } from './services/barcode.js';
 import { corollaIcon } from './services/vehicle-art.js';
-import { VEHICLE_PROFILES, MANUAL_VEHICLE_PROFILE, vehicleProfileById, vehicleFuelKey } from './data/vehicle-catalog.js';
+import { MANUAL_VEHICLE_PROFILE, vehicleProfileById, vehicleFuelKey } from './data/vehicle-catalog.js';
 import { analyzeVehicleHealth, demoHealthSnapshot, obdMetrics } from './services/health-analysis.js';
 import { connectObdClassic, readObdSnapshot, obdSourceNote, demoObdSnapshot } from './services/obd.js';
 import { FUEL_ALERT_SOURCES, alertPolicy } from './services/fuel-alerts.js';
@@ -17,11 +17,12 @@ import { provinceCodes } from './data/province-codes.js';
 import { getNearbyStations } from './services/nearby-stations.js';
 import { readDocument } from './services/document-ocr.js';
 import { searchOnlineVehicleCatalog, onlineVehicleSummary } from './services/vehicle-online.js';
-import { findVehicleImage } from './services/vehicle-images.js';
+import { findVehicleImage, isVehicleImageSuitable } from './services/vehicle-images.js';
 
 const app = document.querySelector('#app');
 const FAVORITE_STATION_BRANDS = ['OPET','Shell','Petrol Ofisi','BP','TotalEnergies','MOİL','Aytemiz','Sunpet'];
 const APP_THEMES = [{id:'aurora',label:'Aurora · Teal'}, {id:'sunset',label:'Gün Batımı · Mercan'}, {id:'violet',label:'Gece · Menekşe'}, {id:'contrast',label:'Yüksek kontrast'}];
+let catalogTypeFilter = 'all';
 const stationBrandKey = value => String(value || '').toLocaleUpperCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 const modalLayer = document.querySelector('#modalLayer');
 const toastStack = document.querySelector('#toastStack');
@@ -64,10 +65,11 @@ const getVehicleProfile = (id, savedVehicle = null) => {
   const memoryProfile = onlineVehicleProfiles.get(key);
   if (memoryProfile) return memoryProfile;
   const localProfile = vehicleProfileById(id);
-  if (!savedVehicle || !key.startsWith('online-') || localProfile.id !== MANUAL_VEHICLE_PROFILE.id) return localProfile;
+  if (!savedVehicle || (!key.startsWith('online-') && key !== 'manual') || localProfile.id !== MANUAL_VEHICLE_PROFILE.id) return localProfile;
   const vehicleType = key.endsWith('-motosiklet') ? 'motosiklet' : key.endsWith('-hafif-ticari') ? 'hafif-ticari' : 'otomobil';
   const fuel = savedVehicle.fuel || 'Belirtilmedi';
-  return { id:key, brand:savedVehicle.brand || '', model:savedVehicle.model || '', variant:`${fuel} · ${vehicleType === 'motosiklet' ? 'Motosiklet' : vehicleType === 'hafif-ticari' ? 'Hafif ticari' : 'Otomobil'}`, fuel, tank:Number(savedVehicle.tank) || null, consumption:null, engine:savedVehicle.engine || '', transmission:savedVehicle.transmission || '', generation:savedVehicle.generation || '', details:[], tip:'Çevrimiçi model keşfi; teknik alanları ruhsat veya üretici kılavuzuyla doğrulayın.', vehicleType, sourceLabel:'NHTSA vPIC çevrimiçi model keşfi · teknik alanlar elle doğrulanmalı', sourceUrl:'https://vpic.nhtsa.dot.gov/api/', online:true, imageUrl:savedVehicle.imageUrl || '', imageSourceUrl:savedVehicle.imageSourceUrl || '', imageTitle:savedVehicle.imageTitle || '', imageRepresentative:savedVehicle.imageRepresentative === true };
+  const profileId = key.startsWith('online-') ? key : `saved-${savedVehicle.brand || 'arac'}-${savedVehicle.model || 'model'}`.toLocaleLowerCase('tr-TR').replace(/[^a-z0-9çğıöşü]+/gi, '-');
+  return { id:profileId, brand:savedVehicle.brand || '', model:savedVehicle.model || '', modelYear:savedVehicle.modelYear || '', variant:`${fuel} · ${vehicleType === 'motosiklet' ? 'Motosiklet' : vehicleType === 'hafif-ticari' ? 'Hafif ticari' : 'Otomobil'}`, fuel, tank:Number(savedVehicle.tank) || null, consumption:null, engine:savedVehicle.engine || '', transmission:savedVehicle.transmission || '', generation:savedVehicle.generation || '', details:[], tip:'İnternetten model keşfi yapıldı; motor, yakıt, depo ve tüketim alanlarını ruhsat veya üretici kılavuzuyla doğrulayın.', vehicleType, sourceLabel:'NHTSA vPIC çevrimiçi model keşfi · teknik alanlar elle doğrulanmalı', sourceUrl:'https://vpic.nhtsa.dot.gov/api/', online:true, imageUrl:savedVehicle.imageUrl || '', imageSourceUrl:savedVehicle.imageSourceUrl || '', imageTitle:savedVehicle.imageTitle || '', imageRepresentative:savedVehicle.imageRepresentative === true };
 };
 const ico = (name, size = 20) => {
   const paths = {
@@ -80,7 +82,7 @@ const ico = (name, size = 20) => {
     alert:'M12 3 2.5 20h19L12 3Zm1 13h-2v-5h2v5Zm0 2h-2v-2h2v2Z', phone:'M7 4h3l1.3 4-2 1.5a15 15 0 0 0 5.2 5.2l1.5-2 4 1.3v3c0 1.1-.9 2-2 2C11.4 19 5 12.6 5 5.9 5 4.9 5.9 4 7 4Z', shield:'M12 3 20 6v5c0 5.2-3.4 8.5-8 10-4.6-1.5-8-4.8-8-10V6l8-3Z', wrench:'m14.7 6.3 3-3a5 5 0 0 0-6.2 6.2L5 16a2.8 2.8 0 1 0 4 4l6.5-6.5a5 5 0 0 0 6.2-6.2l-3 3-4-1-1-4Z', share:'M18 8a3 3 0 1 0-2.8-4A3 3 0 0 0 18 8ZM6 15a3 3 0 1 0 2.8 4A3 3 0 0 0 6 15Zm12 5a3 3 0 1 0-2.8-4A3 3 0 0 0 18 20ZM8.6 14.3l6.8-4.1M8.6 9.7l6.8 4.1', gps:'M12 2v4m0 12v4M2 12h4m12 0h4M5 5l2.8 2.8m8.4 8.4L19 19M19 5l-2.8 2.8m-8.4 8.4L5 19M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z', file:'M6 2h8l4 4v16H6V2Zm7 1v4h4', receipt:'M5 3h14v18l-2-1.4L15 21l-3-1.4L9 21l-2-1.4L5 21V3Zm4 5h6M9 12h6M9 16h4',
     clock:'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm1 4v5l3.4 2', star:'m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.8-5.4 2.8 1-6.1-4.4-4.3 6.1-.9L12 3Z',
     plus:'M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6V5Z', close:'M6 6l12 12M18 6 6 18', chevron:'m9 5 7 7-7 7', refresh:'M19 8V4l-2 2a7 7 0 1 0 1.6 7.5', cloud:'M7 18h10a4 4 0 0 0 .6-7.9A6 6 0 0 0 6.2 8.5 4.8 4.8 0 0 0 7 18Z', pin:'M8 3h8v5l2 3-4 2v7l-2 1-2-1v-7l-4-2 2-3V3Z',
-    google:'M20.4 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h4.7a4 4 0 0 1-1.7 2.6v2.3h2.8c1.6-1.5 2.6-3.8 2.6-6.6ZM12 21c2.4 0 4.5-.8 6-2.2l-2.8-2.3c-.8.5-1.8.8-3.2.8-2.4 0-4.5-1.6-5.2-3.8H3.9v2.4A9 9 0 0 0 12 21ZM6.8 13.5a5.4 5.4 0 0 1 0-3.4V7.7H3.9a9 9 0 0 0 0 8.1l2.9-2.3ZM12 6.3c1.5 0 2.9.5 4 1.6l3-3A9 9 0 0 0 3.9 7.7l2.9 2.4c.7-2.2 2.8-3.8 5.2-3.8Z', bluetooth:'M12 3v18m0-18 6 6-6 3m0 0 6 6-6 3M6 7l12 10M6 17 12 11', backup:'M12 3v11m0 0 4-4m-4 4-4-4M5 19h14', route:'M6 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.6 13.8c2-1.6 3.5-1.1 5.2.2 1.4 1.1 2.4.8 3.3-.1', road:'M4 5h16M4 19h16M8 3v18m8-18v18', badge:'m12 3 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 3Z', camera:'M4 8h3l1.5-2h7L17 8h3v11H4V8Zm8 8a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', image:'M4 5h16v14H4V5Zm2 11 3.5-4 2.5 3 2-2 4 3M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z', hgs:'M4 7h16v10H4V7Zm4 3h8m-8 3h5', check:'m5 12 4 4L19 6', filter:'M4 6h16M7 12h10m-7 6h4', logout:'M10 5H5v14h5m4-10 4 3-4 3m-5-3h9'
+    google:'M20.4 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h4.7a4 4 0 0 1-1.7 2.6v2.3h2.8c1.6-1.5 2.6-3.8 2.6-6.6ZM12 21c2.4 0 4.5-.8 6-2.2l-2.8-2.3c-.8.5-1.8.8-3.2.8-2.4 0-4.5-1.6-5.2-3.8H3.9v2.4A9 9 0 0 0 12 21ZM6.8 13.5a5.4 5.4 0 0 1 0-3.4V7.7H3.9a9 9 0 0 0 0 8.1l2.9-2.3ZM12 6.3c1.5 0 2.9.5 4 1.6l3-3A9 9 0 0 0 3.9 7.7l2.9 2.4c.7-2.2 2.8-3.8 5.2-3.8Z', bluetooth:'M12 3v18m0-18 6 6-6 3m0 0 6 6-6 3M6 7l12 10M6 17 12 11', backup:'M12 3v11m0 0 4-4m-4 4-4-4M5 19h14', route:'M6 18a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm12-9a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8.6 13.8c2-1.6 3.5-1.1 5.2.2 1.4 1.1 2.4.8 3.3-.1', road:'M4 5h16M4 19h16M8 3v18m8-18v18', badge:'m12 3 2.4 4.9 5.4.8-3.9 3.8.9 5.4-4.8-2.5-4.8 2.5.9-5.4-3.9-3.8 5.4-.8L12 3Z', camera:'M4 8h3l1.5-2h7L17 8h3v11H4V8Zm8 8a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', image:'M4 5h16v14H4V5Zm2 11 3.5-4 2.5 3 2-2 4 3M8 9.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z', hgs:'M4 7h16v10H4V7Zm4 3h8m-8 3h5', check:'m5 12 4 4L19 6', filter:'M4 6h16M7 12h10m-7 6h4', qr:'M4 4h6v6H4V4Zm10 0h6v6h-6V4ZM4 14h6v6H4v-6Zm11 0h1m3 0h1m-5 3h1m3 0h1m-5 3h1m3 0h1', logout:'M10 5H5v14h5m4-10 4 3-4 3m-5-3h9'
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${paths[name] || paths.star}"/></svg>`;
 };
@@ -136,8 +138,9 @@ function vehicleVisualMarkup(profile, vehicle = null, compact = false) {
   const representative = vehicle?.imageRepresentative || profile.imageRepresentative;
   const title = vehicle?.imageTitle || profile.imageTitle || `${profile.brand} ${profile.model}`;
   const initials = `${String(profile.brand || '').slice(0,1)}${String(profile.model || '').replace(profile.brand || '', '').trim().slice(0,1)}`.toLocaleUpperCase('tr-TR');
-  if (imageUrl) return `<figure class="vehicle-model-visual ${compact ? 'compact' : ''}" data-vehicle-visual><img src="${esc(imageUrl)}" alt="${esc(title)}" loading="lazy" referrerpolicy="no-referrer"><figcaption>${representative ? 'Temsili model fotoğrafı' : `${esc(profile.brand)} ${esc(profile.model)}`}${sourceUrl ? ` · <a href="${esc(sourceUrl)}" target="_blank" rel="noreferrer">görsel kaynağı</a>` : ''}</figcaption></figure>`;
-  return `<figure class="vehicle-model-visual ${compact ? 'compact' : ''}" data-vehicle-visual><div class="vehicle-model-placeholder"><strong>${esc(initials || 'AR')}</strong><span>${esc(profile.brand)} ${esc(profile.model)}</span></div><figcaption data-vehicle-image-status>Model görseli çevrimiçi aranacak; bulunamazsa bu temsili görünüm korunur.</figcaption></figure>`;
+  const imageIsValid = imageUrl && isVehicleImageSuitable(profile, { url:imageUrl, title });
+  if (imageIsValid) return `<figure class="vehicle-model-visual ${compact ? 'compact' : ''}" data-vehicle-visual><img src="${esc(imageUrl)}" alt="${esc(title)}" loading="lazy" referrerpolicy="no-referrer"><figcaption>${representative ? 'Temsili fotoğraf' : 'Gerçek model fotoğrafı'}${sourceUrl ? ` · <a href="${esc(sourceUrl)}" target="_blank" rel="noreferrer">görsel kaynağı</a>` : ''}</figcaption></figure>`;
+  return `<figure class="vehicle-model-visual ${compact ? 'compact' : ''}" data-vehicle-visual><div class="vehicle-model-placeholder"><strong>${esc(initials || 'AR')}</strong><span>${esc(profile.brand)} ${esc(profile.model)}</span></div><figcaption data-vehicle-image-status>Yanlış model göstermemek için doğrulanmış gerçek fotoğraf aranacak.</figcaption></figure>`;
 }
 function vehicleProfileDetails(profile, vehicle = null) {
   if (!profile || profile.id === MANUAL_VEHICLE_PROFILE.id) return '<span class="muted">Model profili seçilmedi; depo, yakıt ve teknik bilgileri elle girebilirsiniz.</span>';
@@ -160,6 +163,21 @@ function vehicleKnowledgeMarkup(profile) {
   ].filter(Boolean);
   return `<div class="vehicle-knowledge-card"><b>Bu araç için yararlı rehberler</b><small>Bağlantılar yeni sekmede açılır; bakım işlemlerinde üretici kılavuzu ve yetkili servis önceliklidir.</small><div class="vehicle-knowledge-links">${links.map(link=>`<a href="${esc(link.url)}" target="_blank" rel="noreferrer">${esc(link.label)} ${ico('chevron',13)}</a>`).join('')}</div></div>`;
 }
+function vehicleOnlineLookupText(lookup) {
+  if (!lookup || lookup.status === 'idle') return 'Araç kaydedilince model adı ve yılı internetten kontrol edilir.';
+  if (lookup.status === 'loading') return 'İnternetten model doğrulaması yapılıyor…';
+  if (lookup.status === 'error') return `Çevrimiçi kontrol alınamadı: ${lookup.message || 'kaynak yanıt vermedi'}. Teknik veri uydurulmadı.`;
+  const names = (lookup.results || []).slice(0, 3).map(item => `${item.brand} ${item.model}${item.modelYear ? ` (${item.modelYear})` : ''}`).join(' · ');
+  return `${lookup.results?.length || 0} çevrimiçi model eşleşmesi bulundu${names ? `: ${names}` : ''}. Bu kaynak model keşfidir; Türkiye motor, yakıt, depo ve tüketim doğrulaması değildir.`;
+}
+function vehicleInsightCard(profile, vehicle) {
+  if (!vehicle) return '';
+  const lookup = vehicle.onlineLookup || { status:'idle' };
+  const tip = profile?.tip || 'Bu araç için güvenilir teknik ipucu üretmek adına ruhsat, kullanım kılavuzu ve üretici servis bilgilerini esas alın.';
+  const source = profile?.sourceLabel || 'Kullanıcı girişi';
+  const sourceLink = profile?.sourceUrl ? `<a class="profile-source-link" href="${esc(profile.sourceUrl)}" target="_blank" rel="noreferrer">${profile.online ? 'Online model kaynağını aç' : 'Teknik kaynağı aç'}</a>` : '';
+  return `<section class="vehicle-insight-card"><div class="vehicle-insight-head"><div><span class="eyebrow">ARAÇ BİLGİSİ</span><b>Sürücü ipuçları ve model kontrolü</b></div><button class="text-button" data-action="refresh-vehicle-online" data-id="${esc(vehicle.id)}">${lookup.status === 'loading' ? 'Kontrol ediliyor…' : 'Tekrar kontrol et'}</button></div><div class="vehicle-tip prominent"><strong>Sürücü ipucu</strong><span>${esc(tip)}</span></div><div class="vehicle-online-status ${lookup.status === 'error' ? 'warning' : ''}"><span class="status-dot ${lookup.status === 'success' ? 'ok' : ''}"></span><div><b>İnternetten model bilgisi</b><span>${esc(vehicleOnlineLookupText(lookup))}</span>${lookup.checkedAt ? `<small>Son kontrol: ${esc(new Date(lookup.checkedAt).toLocaleString('tr-TR'))} · Kaynak: ${esc(lookup.source || 'NHTSA vPIC')}</small>` : ''}</div></div><small class="vehicle-insight-source">Teknik profil: ${esc(source)}. Yerel profil varsa onun doğrulanmış alanları korunur; online sonuç bunların üzerine yazılmaz.</small>${sourceLink}${profile?.id !== MANUAL_VEHICLE_PROFILE.id ? vehicleKnowledgeMarkup(profile) : ''}</section>`;
+}
 function vehicleCatalogSummary(profile) {
   const fuel = profile.fuel && profile.fuel !== 'Belirtilmedi' ? profile.fuel : 'Yakıt türü belirtilmedi';
   const tank = profile.tank == null ? 'Depo kapasitesi doğrulanmadı' : `${profile.tank} L depo`;
@@ -168,19 +186,19 @@ function vehicleCatalogSummary(profile) {
 }
 function vehicleCatalogMarkup({ searchable = false } = {}) {
   const groups = [['otomobil','Otomobiller'],['hafif-ticari','Hafif ticari'],['motosiklet','Motosikletler']];
-  const sections = groups.map(([type, label]) => {
-    const profiles = VEHICLE_PROFILES.filter(profile => profile.vehicleType === type);
-    if (!profiles.length) return '';
-    const rows = profiles.map(profile => `<button class="card list-row catalog-row" data-catalog-row data-action="catalog-add" data-profile-id="${esc(profile.id)}" data-search-text="${esc(`${profile.brand} ${profile.model} ${profile.fuel} ${profile.engine}`.toLocaleLowerCase('tr-TR'))}"><i class="row-icon">${ico(type === 'motosiklet' ? 'motorcycle' : 'car',22)}</i><span class="row-main"><b>${esc(profile.brand)} ${esc(profile.model)}</b><span>${esc(vehicleCatalogSummary(profile))}</span></span><span class="catalog-add-label">Ekle</span>${ico('chevron',16)}</button>`).join('');
-    return `<section class="catalog-section" data-catalog-section="${type}"><div class="section-head"><h3>${label}</h3><span class="muted">${profiles.length} model</span></div>${rows}</section>`;
+  const availableResults = onlineVehicleResults.filter(profile => catalogTypeFilter === 'all' || profile.vehicleType === catalogTypeFilter);
+  const brands = [...new Set(availableResults.map(profile => profile.brand || 'Diğer'))].sort((a,b) => a.localeCompare(b,'tr-TR'));
+  const sections = brands.map(brand => {
+    const profiles = availableResults.filter(profile => (profile.brand || 'Diğer') === brand);
+    const rows = profiles.map(profile => `<button class="card list-row catalog-row online-catalog-row" data-catalog-row data-action="catalog-add" data-profile-id="${esc(profile.id)}" data-search-text="${esc(`${profile.brand} ${profile.model} ${profile.variant || ''} ${profile.modelYear || ''}`.toLocaleLowerCase('tr-TR'))}"><i class="row-icon ${profile.vehicleType === 'motosiklet' ? 'yellow' : ''}">${ico(profile.vehicleType === 'motosiklet' ? 'motorcycle' : 'car',22)}</i><span class="row-main"><b>${esc(profile.brand)} ${esc(profile.model)}${profile.modelYear ? ` · ${esc(profile.modelYear)}` : ''}</b><span>${esc(profile.variant || '')}</span><small>${esc(onlineVehicleSummary(profile))}</small></span><span class="catalog-add-label">Formda aç</span>${ico('chevron',16)}</button>`).join('');
+    return `<div class="catalog-brand-group" data-catalog-brand="${esc(brand)}"><div class="catalog-brand-heading"><span>${esc(brand)}</span><small>${profiles.length} online sonuç</small></div>${rows}</div>`;
   }).join('');
-  const remoteRows = onlineVehicleResults.map(profile => {
-    onlineVehicleProfiles.set(profile.id, profile);
-    return `<button class="card list-row catalog-row online-catalog-row" data-catalog-row data-action="catalog-add" data-profile-id="${esc(profile.id)}" data-search-text="${esc(`${profile.brand} ${profile.model} ${profile.modelYear}`.toLocaleLowerCase('tr-TR'))}"><i class="row-icon ${profile.vehicleType === 'motosiklet' ? 'yellow' : ''}">${ico(profile.vehicleType === 'motosiklet' ? 'motorcycle' : 'car',22)}</i><span class="row-main"><b>${esc(profile.brand)} ${esc(profile.model)}${profile.modelYear ? ` · ${esc(profile.modelYear)}` : ''}</b><span>${esc(vehicleCatalogSummary(profile))}</span><small>${esc(onlineVehicleSummary(profile))}</small></span><span class="catalog-add-label">Formda aç</span>${ico('chevron',16)}</button>`;
-  }).join('');
-  const remotePanel = searchable ? `<section class="online-vehicle-panel"><div class="section-head"><div><h3>Çevrimiçi model bul</h3><span class="muted">Yeni model/yıl için NHTSA vPIC keşfi</span></div><span class="chip teal">İnternet</span></div><form data-form="online-vehicle-search"><div class="form-grid"><div class="form-group"><label>Marka</label><input required name="make" value="${esc(onlineVehicleQuery.make)}" placeholder="Toyota, Honda, Yamaha"></div><div class="form-group"><label>Model yılı</label><input name="year" type="number" min="1886" max="2100" value="${esc(onlineVehicleQuery.year)}" placeholder="2027"></div></div><div class="form-grid"><div class="form-group"><label>Model (isteğe bağlı)</label><input name="model" value="${esc(onlineVehicleQuery.model)}" placeholder="Corolla, Civic, MT-07"></div><div class="form-group"><label>Tür</label><select name="vehicleType"><option value="otomobil" ${onlineVehicleQuery.vehicleType === 'otomobil' ? 'selected' : ''}>Otomobil</option><option value="hafif-ticari" ${onlineVehicleQuery.vehicleType === 'hafif-ticari' ? 'selected' : ''}>Hafif ticari</option><option value="motosiklet" ${onlineVehicleQuery.vehicleType === 'motosiklet' ? 'selected' : ''}>Motosiklet</option></select></div></div><button class="primary-button full-button" type="submit">${onlineVehicleStatus === 'loading' ? 'Aranıyor…' : 'Çevrimiçi ara'}</button></form><small class="catalog-disclaimer">${onlineVehicleStatus === 'error' ? 'Çevrimiçi katalog okunamadı; yerel katalog ve elle profil kullanılabilir.' : onlineVehicleStatus === 'success' ? `${onlineVehicleResults.length} model sonucu bulundu. Teknik alanları kaydetmeden önce doğrulayın.` : 'Model keşfi yapar; Türkiye trim, motor, depo ve tüketim bilgisini otomatik kesinleştirmez.'}</small>${remoteRows ? `<div class="online-results"><div class="section-head"><h4>Çevrimiçi sonuçlar</h4><span class="muted">${onlineVehicleResults.length} sonuç</span></div>${remoteRows}</div>` : ''}</section>` : '';
-  const manual = `<section class="catalog-section"><div class="section-head"><h3>Manuel profil</h3></div><button class="card list-row catalog-row" data-action="catalog-add" data-profile-id="manual"><i class="row-icon">${ico('car',22)}</i><span class="row-main"><b>Diğer araç</b><span>Marka, model, yıl, motor ve depo kapasitesini kendiniz girin</span></span><span class="catalog-add-label">Ekle</span>${ico('chevron',16)}</button></section>`;
-  return `${remotePanel}${searchable ? '<div class="catalog-search"><input type="search" data-catalog-search placeholder="Yerel katalogda marka veya model ara" aria-label="Araç kataloğunda ara"></div>' : ''}<div data-catalog-list>${sections}${manual}</div>`;
+  const remotePanel = searchable ? `<section class="online-vehicle-panel"><div class="section-head"><div><h3>Aracı internetten bul</h3><span class="muted">Hazır model listesi kullanılmıyor; her arama çevrimiçi kaynaktan gelir.</span></div><span class="chip teal">Online</span></div><form data-form="online-vehicle-search"><div class="form-grid"><div class="form-group"><label>Marka</label><input required name="make" value="${esc(onlineVehicleQuery.make)}" placeholder="Toyota, Honda, Yamaha"></div><div class="form-group"><label>Model</label><input required name="model" value="${esc(onlineVehicleQuery.model)}" placeholder="Corolla, Civic, MT-07"></div></div><div class="form-grid"><div class="form-group"><label>Model yılı (isteğe bağlı)</label><input name="year" type="number" min="1886" max="2100" value="${esc(onlineVehicleQuery.year)}" placeholder="2027"></div><div class="form-group"><label>Araç türü</label><select name="vehicleType"><option value="otomobil" ${onlineVehicleQuery.vehicleType === 'otomobil' ? 'selected' : ''}>Otomobil</option><option value="hafif-ticari" ${onlineVehicleQuery.vehicleType === 'hafif-ticari' ? 'selected' : ''}>Hafif ticari</option><option value="motosiklet" ${onlineVehicleQuery.vehicleType === 'motosiklet' ? 'selected' : ''}>Motosiklet</option></select></div></div><button class="primary-button full-button" type="submit">${onlineVehicleStatus === 'loading' ? 'İnternetten aranıyor…' : 'İnternetten model ara'}</button></form><small class="catalog-disclaimer">${onlineVehicleStatus === 'error' ? 'Çevrimiçi kaynak yanıt vermedi; veri uydurulmadı. Bağlantı gelince tekrar deneyin veya ruhsat QR/manuel formu kullanın.' : onlineVehicleStatus === 'success' ? `${onlineVehicleResults.length} online sonuç bulundu. vPIC model/yıl keşfi sağlar; Türkiye motor, yakıt, depo ve tüketim bilgisi ayrıca ruhsat/kılavuzla doğrulanmalıdır.` : 'Kaynak: NHTSA vPIC. Bu servis model/yıl keşfi yapar; Türkiye trim, motor seçeneği, yakıt, depo ve tüketimi kesinleştirmez.'}</small></section>` : '';
+  const typeFilters = searchable ? `<div class="catalog-type-filters"><button type="button" class="chip ${catalogTypeFilter === 'all' ? 'teal' : ''}" data-action="catalog-type" data-type="all">Sonuçların tümü</button>${groups.map(([type,label]) => `<button type="button" class="chip ${catalogTypeFilter === type ? 'teal' : ''}" data-action="catalog-type" data-type="${type}">${label}</button>`).join('')}</div>` : '';
+  const resultBlock = sections ? `<div data-catalog-list><div class="section-head"><h3>Çevrimiçi sonuçlar</h3><span class="muted">${availableResults.length} model</span></div>${sections}</div>` : `<div class="notice-card online-empty"><div class="notice-icon">${ico('car',20)}</div><div><strong>Henüz online sonuç seçilmedi</strong><p>Marka, model ve isterseniz yılı yazıp arayın. Sonuçlar marka başlıklarıyla burada görünecek.</p></div></div>`;
+  const qr = searchable ? `<div class="catalog-qr-cta"><div><b>Ruhsattan otomatik doldur</b><span>QR açık alan taşıyorsa marka, model, yıl, yakıt, plaka ve VIN alanlarını forma aktarır; şifreli kodda veri uydurulmaz.</span></div><button class="primary-button" type="button" data-action="vehicle-qr-scan">${ico('qr',17)} Ruhsat QR okut</button></div>` : '';
+  const manual = searchable ? `<div class="catalog-manual-fallback"><button class="text-button" data-action="catalog-add" data-profile-id="manual">Model bulunamadı mı? Elle araç bilgisi gir</button></div>` : '';
+  return `${qr}${searchable ? `<div class="catalog-search"><input type="search" data-catalog-search placeholder="Online sonuçlarda marka veya model ara" aria-label="Online sonuçlarda marka veya model ara"></div>${typeFilters}` : ''}${remotePanel}${resultBlock}${manual}`;
 }
 function refuelStats(vehicle, percent, records = refuelPriceRecords) {
   const level = Math.min(100, Math.max(0, Number(percent) || 0));
@@ -306,7 +324,7 @@ function toast(message, warn = false) {
   setTimeout(() => node.remove(), 3600);
 }
 function header() {
-  const gpsReady = state.gps && state.locationAccess?.status === 'granted';
+  const gpsReady = state.gps && !state.settings?.gpsDisabledByUser && state.locationAccess?.status === 'granted';
   return `<header class="topbar"><div class="brand"><span class="brand-mark brand-car brand-photo"><img src="assets/corolla-logo.png" alt="Toyota Corolla" /></span><h1>Sürüş Cepte</h1></div><div class="top-actions"><button class="gps-pill ${gpsReady ? '' : 'off'}" data-action="toggle-gps" aria-label="Konum erişimini yönet"><i class="gps-dot"></i>${gpsReady ? 'GPS açık' : 'GPS kapalı'}</button><button class="icon-button" data-action="settings" aria-label="Ayarlar">${ico('settings',20)}</button></div></header>`;
 }
 function nav() {
@@ -415,7 +433,7 @@ function homeView() {
 function activityRows() {
   const items = [
     ...(state.trips || []).map(t => ({icon:'route', color:'teal', title:t.title, subtitle:`${t.date} · ${t.duration}`, end:`${t.km} km`})),
-    ...(state.parks || []).map(p => ({icon:'park', color:'yellow', title:p.title, subtitle:p.date, end:'Park'}))
+    ...(state.parks || []).map(p => ({icon:'park', color:'yellow', title:p.title, subtitle:p.date, end:'Park', action:'open-parks'}))
   ];
   return items.length ? items.map(row => listRow(row)) : [listRow({icon:'clock',title:'Henüz hareket yok',subtitle:'İlk sürüşünü kaydet',end:''})];
 }
@@ -463,9 +481,36 @@ function homePriorityCard() {
 function listRow({icon='clock',color='',title,subtitle='',end='',action='', chip='', id=''}) {
   return `<button class="list-row" ${action ? `data-action="${action}"`:''}${id ? ` data-id="${esc(id)}"`:''}><i class="row-icon ${color}">${ico(icon,19)}</i><span class="row-main"><b>${esc(title)}</b><span>${esc(subtitle)}</span></span><span class="row-end">${chip ? `<span class="chip ${chip}">${esc(end)}</span>` : `<strong>${esc(end)}</strong>`}</span>${action ? `<i class="chev">${ico('chevron',16)}</i>`:''}</button>`;
 }
+let vehicleCardImageLoadBusy = false;
+async function loadVehicleImagesForCards() {
+  if (vehicleCardImageLoadBusy || !state.vehicles?.length) return;
+  vehicleCardImageLoadBusy = true;
+  let changed = false;
+  try {
+    for (const vehicle of state.vehicles) {
+      const profile = getVehicleProfile(vehicle.profileId, vehicle);
+      if (!profile || profile.id === MANUAL_VEHICLE_PROFILE.id) continue;
+      const current = { url:vehicle.imageUrl || '', title:vehicle.imageTitle || `${vehicle.brand} ${vehicle.model}` };
+      if (current.url && isVehicleImageSuitable(profile, current)) continue;
+      const result = await findVehicleImage(profile);
+      if (!result.ok) continue;
+      Object.assign(vehicle, { imageUrl:result.url, imageSourceUrl:result.sourceUrl || '', imageSourceLabel:result.sourceLabel || '', imageTitle:result.title || `${vehicle.brand} ${vehicle.model}`, imageLicense:result.license || '', imageRepresentative:Boolean(result.representative) });
+      changed = true;
+    }
+    if (changed) { save(state); if (state.view === 'vehicles') render(); }
+  } finally {
+    vehicleCardImageLoadBusy = false;
+  }
+}
 function vehiclesView() {
   const tab = state.vehicleTab;
-  const vehicleCards = state.vehicles.length ? state.vehicles.map(v => { const profile = getVehicleProfile(v.profileId, v); const level = Math.max(0, Math.min(100, Number(v.fuelLevelPercent) || 0)); return `<article class="card vehicle-card"><div class="vehicle-art">${v.imageUrl ? `<img src="${esc(v.imageUrl)}" alt="${esc(v.brand)} ${esc(v.model)}" loading="lazy" referrerpolicy="no-referrer">` : profile.vehicleType === 'motosiklet' ? ico('motorcycle',56) : corollaIcon(56)}</div><div class="vehicle-data"><b>${esc(v.brand)} ${esc(v.model)}</b><span class="plate">${esc(v.plate)}</span><span>${esc(v.fuel)} · ${Number(v.km || 0).toLocaleString('tr-TR')} km · ${esc(vehicleTankLabel(v))} · depo ${level}%</span>${profile.id !== 'manual' ? `<span class="vehicle-profile-tag">${esc(profile.variant)} · resmi profil</span>` : ''}${v.favoriteStation ? `<span class="favorite-station">Favori: ${esc(v.favoriteStation)}</span>` : ''}</div><div class="vehicle-card-actions"><button class="secondary-button" data-action="refuel" data-id="${v.id}">Dolum</button><button class="star-button ${state.selectedVehicleId === v.id ? 'active':''}" data-action="select-vehicle" data-id="${v.id}" aria-label="Aktif araç seç">${ico('star',20)}</button><button class="icon-button" data-action="edit-vehicle" data-id="${v.id}" aria-label="Aracı düzenle">${ico('settings',17)}</button></div></article>`; }).join('') : `<div class="card empty-card"><i class="empty-illustration car-empty">${corollaIcon(86)}</i><h3>Aracını ekleyerek başla</h3><p>Model profili seçildiğinde depo kapasitesi ve doğrulanmış teknik bilgiler otomatik gelir. OBD ve sağlık analizi bu araç üzerinden tutulur.</p><button class="primary-button" data-action="add-vehicle">Araç ekle</button></div>`;
+  const vehicleCards = state.vehicles.length ? state.vehicles.map(v => {
+    const profile = getVehicleProfile(v.profileId, v);
+    const level = Math.max(0, Math.min(100, Number(v.fuelLevelPercent) || 0));
+    const imageOk = v.imageUrl && isVehicleImageSuitable(profile, { url:v.imageUrl, title:v.imageTitle || `${v.brand} ${v.model}` });
+    const card = `<article class="card vehicle-card"><div class="vehicle-art">${imageOk ? `<img src="${esc(v.imageUrl)}" alt="${esc(v.imageTitle || `${v.brand} ${v.model}`)}" loading="lazy" referrerpolicy="no-referrer">` : profile.vehicleType === 'motosiklet' ? ico('motorcycle',56) : corollaIcon(56)}</div><div class="vehicle-data"><b>${esc(v.brand)} ${esc(v.model)}</b><span class="plate">${esc(v.plate)}</span><span>${esc(v.fuel)} · ${Number(v.km || 0).toLocaleString('tr-TR')} km · ${esc(vehicleTankLabel(v))} · depo ${level}%</span>${profile.id !== 'manual' ? `<span class="vehicle-profile-tag">${esc(profile.variant)} · ${profile.online ? 'online profil' : 'eski yerel profil'}</span>` : ''}${v.favoriteStation ? `<span class="favorite-station">Favori: ${esc(v.favoriteStation)}</span>` : ''}</div><div class="vehicle-card-actions"><button class="secondary-button" data-action="refuel" data-id="${v.id}">Dolum</button><button class="star-button ${state.selectedVehicleId === v.id ? 'active':''}" data-action="select-vehicle" data-id="${v.id}" aria-label="Aktif araç seç">${ico('star',20)}</button><button class="icon-button" data-action="edit-vehicle" data-id="${v.id}" aria-label="Aracı düzenle">${ico('settings',17)}</button></div></article>`;
+    return `${card}${vehicleInsightCard(profile, v)}`;
+  }).join('') : `<div class="card empty-card"><i class="empty-illustration car-empty">${corollaIcon(86)}</i><h3>Aracını internetten bul</h3><p>Hazır araç listesi yok. Marka, model ve yılı çevrimiçi aratıp yalnızca kendi aracını kaydedersin.</p><button class="primary-button" data-action="add-vehicle">Online araç ara</button></div>`;
   const catalog = vehicleCatalogMarkup({ searchable:true });
   const hasHealth = Boolean(healthSnapshot?.connected === true && healthReport);
   const healthCard = `<section><div class="section-head"><h3>OBD araç sağlığı</h3><button class="text-button" data-action="obd">${healthSnapshot?.connected ? 'Bağlı':'Bağlan'}</button></div><div class="card health-card"><div class="health-score ${hasHealth && healthReport.score < 65 ? 'warn':''}"><strong>${hasHealth ? healthReport.score : '—'}</strong>${hasHealth ? '<span>/100</span>':''}</div><div class="health-copy"><b>${hasHealth ? healthReport.level : healthSnapshot ? 'OBD bağlantısı yok' : 'Ölçüm bekleniyor'}</b><span>${hasHealth ? (healthReport.findings[0]?.title || 'Sonuç hazır') : 'Gerçek araç sağlığı için ELM327 adaptörü bağlayın'}</span><small>${healthSnapshot?.connected ? healthSnapshot.source : healthSnapshot ? 'Canlı OBD verisi yok; demo/test verisi gösterilmiyor' : 'Henüz araçtan veri okunmadı'}</small></div><button class="icon-button" data-action="obd" aria-label="OBD bağlantısını aç">${ico('chevron',18)}</button></div></section>`;
@@ -508,6 +553,7 @@ function render() {
   document.documentElement.dataset.theme = theme;
   app.innerHTML = `${header()}${state.view === 'home' ? homeView() : state.view === 'vehicles' ? vehiclesView() : state.view === 'journey' ? journeyView() : state.view === 'prices' ? pricesView() : state.view === 'refuel' ? refuelView() : accountView()}${nav()}`;
   if (state.view === 'refuel') updateRefuelPage(refuelDraftPercent ?? (state.vehicles.find(item => item.id === state.selectedVehicleId)?.fuelLevelPercent || 0));
+  if (state.view === 'vehicles' && state.vehicleTab === 'vehicles') setTimeout(() => loadVehicleImagesForCards().catch(() => {}), 0);
 }
 function openModal(title, subtitle, body) {
   modalLayer.innerHTML = `<section class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><div><h3>${esc(title)}</h3>${subtitle ? `<p>${esc(subtitle)}</p>`:''}</div><button class="close-button" data-action="close" aria-label="Kapat">${ico('close',19)}</button></div>${body}</section>`;
@@ -516,17 +562,22 @@ function openModal(title, subtitle, body) {
 function closeModal() { modalLayer.classList.remove('open'); modalLayer.setAttribute('aria-hidden','true'); modalLayer.innerHTML=''; }
 function vehicleModal(vehicle = null) {
   const editing = Boolean(vehicle?.id);
-  const v = vehicle || { brand:'', model:'', modelYear:'', engine:'', transmission:'', generation:'', plate:'', fuel:'Benzin', tank:'', km:state.settings.mileage || 0, favoriteStation:'', profileId:'manual', fuelLevelPercent:0, imageUrl:'', imageSourceUrl:'', imageTitle:'', imageRepresentative:false };
+  const v = vehicle || { brand:'', model:'', modelYear:'', engine:'', transmission:'', generation:'', plate:'', vin:'', fuel:'Benzin', tank:'', km:state.settings.mileage || 0, favoriteStation:'', profileId:'manual', fuelLevelPercent:0, imageUrl:'', imageSourceUrl:'', imageTitle:'', imageRepresentative:false };
   const profile = getVehicleProfile(v.profileId, v);
-  const formProfiles = [MANUAL_VEHICLE_PROFILE, ...VEHICLE_PROFILES, ...onlineVehicleProfiles.values()].filter((item, index, list) => list.findIndex(candidate => candidate.id === item.id) === index);
+  const formProfiles = [MANUAL_VEHICLE_PROFILE, ...onlineVehicleProfiles.values(), ...(profile.id !== MANUAL_VEHICLE_PROFILE.id ? [profile] : [])].filter((item, index, list) => list.findIndex(candidate => candidate.id === item.id) === index);
   const options = formProfiles.map(item => `<option value="${esc(item.id)}" ${profile.id === item.id ? 'selected':''}>${item.id === 'manual' ? 'Diğer / elle gir' : `${item.brand} ${item.model} · ${item.variant}`}</option>`).join('');
-  openModal(editing?'Aracı düzenle':'Yeni araç ekle','Model profili seçildiğinde depo kapasitesi ve doğrulanmış teknik bilgiler forma aktarılır; çevrimiçi sonuçlarda eksik alanları ruhsat/kılavuzla tamamlayın.',`<form data-form="vehicle"><input type="hidden" name="id" value="${esc(editing ? vehicle.id : '')}"><input type="hidden" name="imageUrl" value="${esc(v.imageUrl || profile.imageUrl || '')}"><input type="hidden" name="imageSourceUrl" value="${esc(v.imageSourceUrl || profile.imageSourceUrl || '')}"><input type="hidden" name="imageTitle" value="${esc(v.imageTitle || profile.imageTitle || '')}"><input type="hidden" name="imageRepresentative" value="${v.imageRepresentative || profile.imageRepresentative ? 'true' : 'false'}"><div class="form-group"><label>Araç model profili</label><select name="profileId" data-vehicle-profile>${options}</select><div class="vehicle-profile-summary" data-profile-summary>${vehicleProfileDetails(profile, v)}</div></div><div class="form-grid"><div class="form-group"><label>Marka</label><input required name="brand" value="${esc(v.brand)}" placeholder="Örn. Toyota"></div><div class="form-group"><label>Model</label><input required name="model" value="${esc(v.model)}" placeholder="Örn. Corolla"></div></div><div class="form-grid"><div class="form-group"><label>Model yılı</label><input name="modelYear" type="number" min="1886" max="2100" value="${esc(v.modelYear || profile.modelYear || '')}" placeholder="Örn. 2027"></div><div class="form-group"><label>Motor / versiyon</label><input name="engine" value="${esc(v.engine || profile.engine || '')}" placeholder="Örn. 1.5 Hybrid 140 HP"></div></div><div class="form-grid"><div class="form-group"><label>Şanzıman</label><input name="transmission" value="${esc(v.transmission || profile.transmission || '')}" placeholder="Örn. e-CVT / Manuel"></div><div class="form-group"><label>Nesil / kasa</label><input name="generation" value="${esc(v.generation || profile.generation || '')}" placeholder="Örn. E210"></div></div><div class="form-grid"><div class="form-group"><label>Plaka</label><input required name="plate" value="${esc(v.plate)}" placeholder="34 YKA 01"></div><div class="form-group"><label>Yakıt tipi</label><select name="fuel">${['Benzin','Motorin','LPG','Hibrit','Elektrik','Belirtilmedi'].map(x=>`<option ${v.fuel===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="form-grid"><div class="form-group"><label>Depo kapasitesi (L)</label><input required type="number" min="1" name="tank" value="${esc(v.tank ?? profile.tank ?? '')}" placeholder="Resmi veride yoksa elle girin"></div><div class="form-group"><label>Kilometre</label><input type="number" min="0" name="km" value="${esc(v.km)}"></div></div><div class="form-group"><label>Favori akaryakıt markası</label><select name="favoriteStation"><option value="">Seçilmedi</option>${FAVORITE_STATION_BRANDS.map(brand=>`<option value="${esc(brand)}" ${v.favoriteStation===brand?'selected':''}>${esc(brand)}</option>`).join('')}</select><small class="muted">Yakındaki istasyonlarda bu marka öne çıkarılır.</small></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">${editing?'Kaydet':'Aracı ekle'}</button></div>${editing?`<button type="button" class="danger-button full-button" style="margin-top:10px" data-action="delete-vehicle" data-id="${vehicle.id}">Aracı sil</button>`:''}</form>`);
+  openModal(editing?'Aracı düzenle':'Yeni araç ekle','Bu formdaki model profili online aramadan gelir. vPIC teknik motor, yakıt ve depo alanlarını doğrulamaz; eksikleri ruhsat veya kullanım kılavuzuyla tamamlayın.',`<form data-form="vehicle"><input type="hidden" name="id" value="${esc(editing ? vehicle.id : '')}"><input type="hidden" name="imageUrl" value="${esc(v.imageUrl || profile.imageUrl || '')}"><input type="hidden" name="imageSourceUrl" value="${esc(v.imageSourceUrl || profile.imageSourceUrl || '')}"><input type="hidden" name="imageTitle" value="${esc(v.imageTitle || profile.imageTitle || '')}"><input type="hidden" name="imageRepresentative" value="${v.imageRepresentative || profile.imageRepresentative ? 'true' : 'false'}"><div class="form-group"><label>Online araç modeli</label><select name="profileId" data-vehicle-profile>${options}</select><div class="vehicle-profile-summary" data-profile-summary>${vehicleProfileDetails(profile, v)}</div></div><div class="form-grid"><div class="form-group"><label>Marka</label><input required name="brand" value="${esc(v.brand)}" placeholder="Örn. Toyota"></div><div class="form-group"><label>Model</label><input required name="model" value="${esc(v.model)}" placeholder="Örn. Corolla"></div></div><div class="form-grid"><div class="form-group"><label>Model yılı</label><input name="modelYear" type="number" min="1886" max="2100" value="${esc(v.modelYear || profile.modelYear || '')}" placeholder="Örn. 2027"></div><div class="form-group"><label>Motor / versiyon</label><input name="engine" value="${esc(v.engine || profile.engine || '')}" placeholder="Online kaynak vermiyorsa ruhsattan girin"></div></div><div class="form-grid"><div class="form-group"><label>Şanzıman</label><input name="transmission" value="${esc(v.transmission || profile.transmission || '')}" placeholder="Örn. e-CVT / Manuel"></div><div class="form-group"><label>Nesil / kasa</label><input name="generation" value="${esc(v.generation || profile.generation || '')}" placeholder="Örn. E210"></div></div><div class="form-grid"><div class="form-group"><label>Plaka</label><input required name="plate" value="${esc(v.plate)}" placeholder="34 YKA 01"></div><div class="form-group"><label>Yakıt tipi</label><select name="fuel">${['Benzin','Motorin','LPG','Hibrit','Elektrik','Belirtilmedi'].map(x=>`<option ${v.fuel===x?'selected':''}>${x}</option>`).join('')}</select></div></div><div class="form-grid"><div class="form-group"><label>Şasi / VIN</label><input name="vin" value="${esc(v.vin || '')}" placeholder="Ruhsattan okunursa otomatik gelir"></div><div class="form-group"><label>Depo kapasitesi (L)</label><input required type="number" min="1" name="tank" value="${esc(v.tank ?? profile.tank ?? '')}" placeholder="Ruhsat/kılavuzla doğrulayın"></div></div><div class="form-group"><label>Kilometre</label><input type="number" min="0" name="km" value="${esc(v.km)}"></div></div><div class="form-group"><label>Favori akaryakıt markası</label><select name="favoriteStation"><option value="">Seçilmedi</option>${FAVORITE_STATION_BRANDS.map(brand=>`<option value="${esc(brand)}" ${v.favoriteStation===brand?'selected':''}>${esc(brand)}</option>`).join('')}</select><small class="muted">Yakındaki istasyonlarda bu marka öne çıkarılır.</small></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">${editing?'Kaydet':'Aracı ekle'}</button></div>${editing?`<button type="button" class="danger-button full-button" style="margin-top:10px" data-action="delete-vehicle" data-id="${vehicle.id}">Aracı sil</button>`:''}</form>`);
   void loadVehicleImageIntoForm(modalLayer.querySelector('form[data-form="vehicle"]'), profile);
 }
 async function loadVehicleImageIntoForm(form, profile) {
   if (!form || !profile || profile.id === MANUAL_VEHICLE_PROFILE.id || form.dataset.imageLoading === 'true') return;
   const visual = form.querySelector('[data-vehicle-visual]');
-  if (!visual || form.elements.imageUrl?.value) return;
+  const storedImage = { url:form.elements.imageUrl?.value || '', title:form.elements.imageTitle?.value || '' };
+  if (!visual || (storedImage.url && isVehicleImageSuitable(profile, storedImage))) return;
+  if (form.elements.imageUrl && storedImage.url) form.elements.imageUrl.value = '';
+  if (form.elements.imageSourceUrl && storedImage.url) form.elements.imageSourceUrl.value = '';
+  if (form.elements.imageTitle && storedImage.url) form.elements.imageTitle.value = '';
+  if (form.elements.imageRepresentative && storedImage.url) form.elements.imageRepresentative.value = 'false';
   form.dataset.imageLoading = 'true';
   const status = visual.querySelector('[data-vehicle-image-status]');
   if (status) status.textContent = 'Model görseli çevrimiçi aranıyor…';
@@ -562,6 +613,39 @@ function applyVehicleProfile(form, profileId) {
   if (form.elements.imageRepresentative) form.elements.imageRepresentative.value = profile.imageRepresentative ? 'true' : 'false';
   void loadVehicleImageIntoForm(form, profile);
 }
+function vehicleTypeFromProfile(profile) {
+  return profile?.vehicleType === 'motosiklet' ? 'motosiklet' : profile?.vehicleType === 'hafif-ticari' ? 'hafif-ticari' : 'otomobil';
+}
+async function refreshVehicleOnlineLookup(vehicleId, { notify = false } = {}) {
+  const vehicle = state.vehicles.find(item => item.id === vehicleId);
+  if (!vehicle || !String(vehicle.brand || '').trim() || !String(vehicle.model || '').trim()) return;
+  const profile = getVehicleProfile(vehicle.profileId, vehicle);
+  vehicle.onlineLookup = { ...(vehicle.onlineLookup || {}), status:'loading', requestedAt:new Date().toISOString(), message:'' };
+  save(state);
+  if (state.view === 'vehicles') render();
+  try {
+    const payload = await searchOnlineVehicleCatalog({ make:vehicle.brand, model:vehicle.model, year:vehicle.modelYear || '', vehicleType:vehicleTypeFromProfile(profile) });
+    const results = (payload.results || []).slice(0, 12);
+    results.forEach(result => onlineVehicleProfiles.set(result.id, result));
+    vehicle.onlineLookup = { status:'success', checkedAt:payload.checkedAt || new Date().toISOString(), source:payload.source || 'NHTSA vPIC', results, note:payload.note || '' };
+    save(state);
+    if (state.view === 'vehicles') render();
+    if (notify) toast(results.length ? `${results.length} online model eşleşmesi bulundu.` : 'Online kaynak yanıt verdi; bu araç için model eşleşmesi bulunamadı.', !results.length);
+  } catch (error) {
+    vehicle.onlineLookup = { ...(vehicle.onlineLookup || {}), status:'error', checkedAt:new Date().toISOString(), source:'NHTSA vPIC', message:error?.message || 'kaynak yanıt vermedi', results:[] };
+    save(state);
+    if (state.view === 'vehicles') render();
+    if (notify) toast('Online araç kontrolü alınamadı; teknik veri uydurulmadı.', true);
+  }
+}
+function refreshMissingVehicleLookups() {
+  const week = 7 * 24 * 60 * 60 * 1000;
+  state.vehicles.filter(vehicle => {
+    if (!vehicle.brand || !vehicle.model) return false;
+    const checkedAt = vehicle.onlineLookup?.checkedAt ? Date.parse(vehicle.onlineLookup.checkedAt) : 0;
+    return !checkedAt || Date.now() - checkedAt > week;
+  }).slice(0, 3).forEach(vehicle => { void refreshVehicleOnlineLookup(vehicle.id); });
+}
  let accidentGpsDraft = null;
  const localDateTime = value => { const date = value ? new Date(value) : new Date(); const safe = Number.isNaN(date.getTime()) ? new Date() : date; return new Date(safe.getTime() - safe.getTimezoneOffset() * 60000).toISOString().slice(0,16); };
  function gpsLabel(gps) { return gps?.latitude != null ? `${Number(gps.latitude).toFixed(6)}, ${Number(gps.longitude).toFixed(6)}${gps.accuracy ? ` · ±${Math.round(gps.accuracy)} m` : ''}` : 'GPS kaydı yok'; }
@@ -587,7 +671,7 @@ function applyVehicleProfile(form, profileId) {
  }
 function hgsModal() { openModal('HGS / OGS geçişi','Geçişi gider raporuna eklemek için demo kayıt oluşturun.',`<form data-form="hgs"><div class="form-group"><label>Geçiş noktası</label><input required name="title" placeholder="Örn. Osmangazi Köprüsü"></div><div class="form-group"><label>Tutar (₺)</label><input required type="number" min="0" step="0.01" name="amount" placeholder="0,00"></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">Geçişi ekle</button></div></form>`); }
 function driverModal() { openModal('Sürücü ekle','Yerel sürücü listesine kayıt ekleyin.',`<form data-form="driver"><div class="form-group"><label>Ad soyad</label><input required name="name" placeholder="Örn. Ayşe Yılmaz"></div><div class="form-group"><label>E-posta</label><input required type="email" name="email" placeholder="ayse@example.com"></div><div class="form-group"><label>Rol</label><select name="role"><option>Yetkili sürücü</option><option>Görüntüleyici</option></select></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">Sürücüyü kaydet</button></div></form>`); }
-function catalogModal() { openModal('Araç kataloğu','Yerel resmi profiller çevrimdışı çalışır; çevrimiçi arama yeni model/yıl keşfi yapar. Teknik alanları kaydetmeden önce doğrulayın.', vehicleCatalogMarkup({ searchable:true })); }
+function catalogModal() { openModal('Araç ekle · online model ara','Hazır araç listesi kullanılmaz. Marka/modeli internetten arayın; sonuç yoksa ruhsat QR veya elle girişle devam edin. Teknik alanları ruhsat/kılavuzla doğrulayın.', vehicleCatalogMarkup({ searchable:true })); }
 function tripNoteModal() { openModal('Sürüş notu','Aktif sürüşe yerel bir not ekleyin.',`<form data-form="trip-note"><div class="form-group"><label>Not</label><textarea required name="note" placeholder="Örn. Trafik yoğundu"></textarea></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">Notu kaydet</button></div></form>`); }
   function locationModal() { const cityOptions = provinces.map(city => `<option value="${esc(city)}" ${state.location.city === city ? 'selected':''}>${esc(city)}</option>`).join(''); const items = locationItems(state.location.city); const districtOptions = items.map(item => `<option value="${esc(item.name)}" ${state.location.district === item.name ? 'selected':''}>${esc(item.name)}</option>`).join(''); openModal('Konum seçimi','81 il arasından seçim yapın. İstanbul’da ilçe, diğer illerde il geneli fiyatı gösterilir.',`<form data-form="location"><div class="form-group"><label>İl</label><select name="city" data-location-city>${cityOptions}</select></div><div class="form-group"><label>İlçe / kapsam</label><select name="district" data-location-district>${districtOptions}</select></div><div class="sheet-actions"><button type="button" class="secondary-button" data-action="close">Vazgeç</button><button class="primary-button" type="submit">Konumu kaydet</button></div></form>`); }
 function settingsModal() { const fontScale = ['normal','large','xlarge'].includes(state.settings?.fontScale) ? state.settings.fontScale : 'normal'; const theme = APP_THEMES.some(item => item.id === state.settings?.theme) ? state.settings.theme : 'aurora'; openModal('Uygulama ayarları','Bu ayarlar cihazınızda localStorage ile saklanır.',`<div class="switch-row"><i class="row-icon">${ico('bell',18)}</i><span class="switch-copy"><b>Yakıt bildirimleri</b><span>İndirim ve fiyat değişimi uyarıları</span></span>${switchControl('notifications',state.settings.notifications)}</div><div class="switch-row"><i class="row-icon">${ico('park',18)}</i><span class="switch-copy"><b>Otomatik park önerisi</b><span>Sürüş kaydı açıkken yaklaşık 3 dakika sabit konumu ölçer; kaydetmeden önce size gösterir.</span></span>${switchControl('autoParkDetection',Boolean(state.settings.autoParkDetection))}</div><div class="notice-card"><div class="notice-icon">${ico('gps',18)}</div><div><strong>GPS ve arka plan sınırı</strong><p>Ölçüm yüksek doğrulukla yalnızca aktif sürüş kaydı ve uygulama ön plandayken yapılır. Uygulama tamamen kapalıyken gizli arka plan takibi yapılmaz; gerçek sürekli takip için ayrıca Android foreground-service izni gerekir.</p></div></div><div class="switch-row"><i class="row-icon">${ico('map',18)}</i><span class="switch-copy"><b>GPS</b><span>${state.locationAccess?.status === 'granted' ? 'İzin açık; uygulama içi kullanım' : 'İzin gerekli; konumu aç düğmesine dokunun'}</span></span>${switchControl('gps',state.gps && state.locationAccess?.status === 'granted','root')}</div><button class="secondary-button full-button" type="button" data-action="request-location" style="margin-top:12px">${state.locationAccess?.status === 'granted' ? 'Konum erişimini kontrol et' : 'Konumu aç / tekrar dene'}</button><div class="theme-setting"><div><b>Görünüm teması</b><span>Kartların renk, derinlik ve vurgu stilini seçin.</span></div><select data-setting="theme" data-scope="settings" aria-label="Görünüm teması">${APP_THEMES.map(item=>`<option value="${item.id}" ${theme === item.id ? 'selected' : ''}>${item.label}</option>`).join('')}</select></div><div class="font-size-setting"><div><b>Yazı boyutu</b><span>Görme desteği için uygulama metinlerini büyütün.</span></div><select data-setting="fontScale" data-scope="settings" aria-label="Yazı boyutu"><option value="normal" ${fontScale === 'normal' ? 'selected' : ''}>Normal</option><option value="large" ${fontScale === 'large' ? 'selected' : ''}>Büyük</option><option value="xlarge" ${fontScale === 'xlarge' ? 'selected' : ''}>Çok büyük</option></select></div><form data-form="mileage"><div class="form-group"><label>Güncel kilometre</label><input name="mileage" type="number" min="0" value="${state.settings.mileage || 0}"></div><button class="primary-button full-button" type="submit">Kilometreyi kaydet</button></form>`); }
@@ -621,8 +705,14 @@ function historyModal(kind) {
   }
   const trips = state.trips || [];
   const body = trips.length ? trips.map(t=>`<article class="history-record"><div class="history-record-head"><i class="row-icon">${ico('route',19)}</i><div><b>${esc(t.title || 'Sürüş kaydı')}</b><small>${esc(t.date || '')} · ${esc(t.duration || 'Süre yok')} · ${Number(t.km || 0).toLocaleString('tr-TR',{maximumFractionDigits:1})} km</small></div><span class="chip teal">${esc(t.type || 'Kişisel')}</span></div><p>${esc(t.note || (t.kmSource || 'Yerel kayıt'))}</p><div class="history-actions"><button class="secondary-button" data-action="edit-trip" data-id="${esc(t.id)}">Düzenle</button><button class="danger-button" data-action="delete-trip" data-id="${esc(t.id)}">Sil</button></div></article>`).join('') : '<div class="empty-card"><p>Yeni bir kayıt oluşturduğunuzda burada görünür.</p></div>';
-  openModal('Geçmiş sürüşler',trips.length?'Sürüş kayıtlarını düzenleyebilir veya silebilirsiniz.':'Henüz kayıt bulunmuyor.',`<div class="history-list">${body}</div>`);
- }
+ openModal('Geçmiş sürüşler',trips.length?'Sürüş kayıtlarını düzenleyebilir veya silebilirsiniz.':'Henüz kayıt bulunmuyor.',`<div class="history-list">${body}</div>`);
+}
+function openParkHistory() {
+  state.view = 'journey';
+  persist();
+  render();
+  setTimeout(() => historyModal('parks'), 0);
+}
  function documentsModal() { const accidents=state.accidents || []; const receipts=state.receipts || []; const accidentRows=accidents.map(item=>{ const photo=item.photos?.[0] || item.photo; const gps=item.gps?.latitude != null ? `${Number(item.gps.latitude).toFixed(5)}, ${Number(item.gps.longitude).toFixed(5)}` : 'GPS yok'; return `<article class="document-row">${photo?.dataUrl ? `<img src="${esc(photo.dataUrl)}" alt="${esc(item.title)}" class="document-thumb">` : `<i class="row-icon coral">${ico('alert',19)}</i>`}<span class="document-copy"><b>${esc(item.title)}</b><small>${esc(item.occurredAt || item.date)} · ${esc(item.plate || 'Plaka yok')} · ${gps}</small><small>${item.injury === 'Var' ? 'Yaralanma bildirildi' : 'Yaralanma yok/bilinmiyor'} · ${esc(item.official || 'Resmi kayıt yok')}</small></span><button class="secondary-button" data-action="edit-accident" data-id="${item.id}">Düzenle</button></article>`; }).join(''); const receiptRows=receipts.map(item=>`<article class="document-row"><i class="row-icon">${ico('receipt',19)}</i><span class="document-copy"><b>${esc(item.stationBrand || item.stationName || item.fuel || 'Yakıt fişi')} · ${item.amount ? money(item.amount) : 'Tutar okunamadı'}</b><small>${esc(item.date || 'Tarih okunamadı')}${item.time ? ` · ${esc(item.time)}` : ''}${item.liters != null ? ` · ${Number(item.liters).toLocaleString('tr-TR')} L` : ''}${item.plate ? ` · ${esc(item.plate)}` : ''}</small></span><button class="secondary-button" data-action="edit-receipt" data-id="${esc(item.id)}">Düzenle</button></article>`).join(''); const content=`<div class="sheet-actions"><button class="primary-button" data-action="accident">Yeni kaza tutanağı</button><button class="secondary-button" data-action="barcode-scan">Karekod / barkod okut</button></div><div class="section-head"><h4>Kaza tutanakları</h4><span class="muted" style="font-size:10px">${accidents.length} kayıt</span></div>${accidentRows || '<div class="empty-card"><p>Henüz kaza tutanağı yok.</p></div>'}${receipts.length ? `<div class="section-head"><h4>Yakıt fişleri</h4></div>${receiptRows}` : ''}`; openModal('Yolculuk belgeleri','Kaza tutanakları düzenlenebilir; GPS, fotoğraf ve acil durum bilgileri cihazda tutulur.',content); }
 function notificationSettingsModal() {
   openModal('Bildirimler','Android 13+ için izin uygulama içindeki bu düğmeye dokununca istenir. Yalnızca canlı kaynakta doğrulanan fiyat değişimleri alarm üretir.',`<div class="switch-row"><i class="row-icon">${ico('bell',18)}</i><span class="switch-copy"><b>Doğrulanmış yakıt alarmı</b><span>Tahmin değil; iki veya daha fazla canlı kaynak ölçümü karşılaştırılır.</span></span>${switchControl('notifications',state.settings.notifications)}</div><button class="secondary-button full-button" data-action="request-notification" style="margin-top:14px">Android bildirim iznini aç</button><p class="muted" style="font-size:10px;line-height:1.45;margin-top:10px">İzin daha önce reddedildiyse Android Ayarlar &gt; Uygulamalar &gt; Sürüş Cepte &gt; Bildirimler yolundan açın. Web önizlemesinde tarayıcı site izni kullanılır.</p>`);
@@ -687,13 +777,57 @@ function documentOcrResultModal(result, type) { const p=result.parsed || {}; con
    pendingBarcodeResult = null;
    receiptFormModal(parsed, { ocr:true, rawText:raw, passes:1, message:'Karekoddan alınan alanları kaydetmeden önce kontrol edin.' }, null);
  }
- async function copyBarcodeValue() {
-   const raw = pendingBarcodeResult?.rawValue || '';
-   if (!raw) return;
-   try { await navigator.clipboard.writeText(raw); toast('Karekod verisi panoya kopyalandı.'); }
-   catch { toast('Kopyalama izni alınamadı.', true); }
- }
- async function runBarcodeScan() {
+async function copyBarcodeValue() {
+  const raw = pendingBarcodeResult?.rawValue || '';
+  if (!raw) return;
+  try { await navigator.clipboard.writeText(raw); toast('Karekod verisi panoya kopyalandı.'); }
+  catch { toast('Kopyalama izni alınamadı.', true); }
+}
+function registrationProfile(fields) {
+  const norm = value => String(value || '').toLocaleLowerCase('tr-TR').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'');
+  const brand = norm(fields.brand); const model = norm(fields.model); const fuel = norm(fields.fuel);
+  const candidates = [...onlineVehicleProfiles.values()];
+  return candidates.map(profile => {
+    const pBrand = norm(profile.brand); const pModel = norm(profile.model); const pFuel = norm(profile.fuel);
+    let score = 0;
+    if (brand && pBrand === brand) score += 5;
+    if (model && (pModel === model || pModel.includes(model) || model.includes(pModel))) score += 6;
+    if (fuel && pFuel && (pFuel.includes(fuel) || fuel.includes(pFuel))) score += 2;
+    if (fields.modelYear && String(profile.modelYear || '') === String(fields.modelYear)) score += 2;
+    return { profile, score };
+  }).sort((a,b) => b.score - a.score)[0]?.score >= 9 ? candidates.map(profile => {
+    const pBrand = norm(profile.brand); const pModel = norm(profile.model); const pFuel = norm(profile.fuel);
+    let score = (brand && pBrand === brand ? 5 : 0) + (model && (pModel === model || pModel.includes(model) || model.includes(pModel)) ? 6 : 0) + (fuel && pFuel && (pFuel.includes(fuel) || fuel.includes(pFuel)) ? 2 : 0) + (fields.modelYear && String(profile.modelYear || '') === String(fields.modelYear) ? 2 : 0);
+    return { profile, score };
+  }).sort((a,b) => b.score - a.score)[0].profile : null;
+}
+function vehicleFromRegistration(fields, profile = null) {
+  return {
+    ...(profile || {}), profileId:profile?.id || 'manual', brand:fields.brand || profile?.brand || '', model:fields.model || profile?.model || '', modelYear:fields.modelYear || profile?.modelYear || '', engine:fields.engine || profile?.engine || '', transmission:fields.transmission || profile?.transmission || '', generation:fields.generation || profile?.generation || '', plate:fields.plate || '', vin:fields.vin || '', fuel:fields.fuel || profile?.fuel || 'Belirtilmedi', tank:fields.tank ? Number(fields.tank) : (profile?.tank ?? ''), km:state.settings.mileage || 0, favoriteStation:'', fuelLevelPercent:0, imageUrl:profile?.imageUrl || '', imageSourceUrl:profile?.imageSourceUrl || '', imageTitle:profile?.imageTitle || '', imageRepresentative:Boolean(profile?.imageRepresentative)
+  };
+}
+function vehicleRegistrationResultModal(result) {
+  const parsed = parseVehicleRegistrationQr(result.rawValue);
+  const fieldRows = Object.entries(parsed.fields || {}).filter(([,value]) => value).map(([key,value]) => `<div class="metric-row"><span>${esc(key)}</span><b>${esc(value)}</b></div>`).join('');
+  openModal('Ruhsat karekod sonucu', parsed.ok ? 'Okunabilen araç alanları formda seçilecek ve düzenlenebilir.' : 'Bu kod araç bilgilerini açık alanlar halinde taşımıyor.', `<div class="receipt-result"><div class="receipt-status ${parsed.ok ? 'ok' : ''}">${esc(parsed.message)}</div>${parsed.ok ? `<div class="metric-list">${fieldRows}</div><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">Güvenlik nedeniyle bazı ruhsat karekodları yalnızca doğrulama bağlantısı veya şifreli veri taşır. Bu durumda uygulama alan uydurmaz; ham veriyi gösterir ve manuel forma geçmenizi sağlar.</p>` : `<details open><summary>Okunan ham veri</summary><pre>${esc(result.rawValue)}</pre></details><p class="muted" style="font-size:10px;line-height:1.45;margin-top:12px">Karekod bir bağlantı/şifreli kimlik olabilir. Bu veri içinden marka, model veya plaka güvenle çıkarılamadığı için otomatik alan doldurulmadı.</p>`}</div><div class="sheet-actions"><button class="secondary-button" data-action="copy-barcode">Veriyi kopyala</button>${parsed.ok ? '<button class="primary-button" data-action="apply-vehicle-qr">Aracı forma aktar</button>' : '<button class="primary-button" data-action="vehicle-manual-from-qr">Elle forma geç</button>'}</div>`);
+  pendingBarcodeResult = { ...result, registration:parsed };
+}
+async function runVehicleRegistrationQr() {
+  closeModal();
+  toast('Ruhsat karekod tarayıcı açılıyor…');
+  const result = await scanBarcode();
+  if (result.ok) vehicleRegistrationResultModal(result);
+  else if (!result.cancelled) toast(result.message || 'Ruhsat karekodu okunamadı.', true);
+}
+function applyVehicleRegistrationQr(manualOnly = false) {
+  const parsed = pendingBarcodeResult?.registration || parseVehicleRegistrationQr(pendingBarcodeResult?.rawValue || '');
+  pendingBarcodeResult = null;
+  const profile = manualOnly ? null : registrationProfile(parsed.fields || {});
+  closeModal();
+  vehicleModal(vehicleFromRegistration(parsed.fields || {}, profile));
+  toast(profile ? `${profile.brand} ${profile.model} profili seçildi; ruhsat alanlarını kontrol edin.` : 'Ruhsat verisi forma aktarıldı; eksik alanları tamamlayın.');
+}
+async function runBarcodeScan() {
    closeModal();
    toast('Karekod tarayıcı açılıyor…');
    const result = await scanBarcode();
@@ -729,6 +863,7 @@ async function requestLocationAccess({ showModal = true } = {}) {
   rememberLocationResult(result);
   if (result.ok) {
     state.gps = true;
+    state.settings.gpsDisabledByUser = false;
     state.settings.locationPromptSeen = true;
     save(state);
     render();
@@ -751,6 +886,10 @@ async function initializeLocationAccess() {
   state.settings.locationPromptSeen = true;
   save(state);
   if (firstLaunch) {
+    if (state.locationAccess?.status === 'granted' && !state.settings.gpsDisabledByUser) {
+      state.gps = true;
+      save(state);
+    }
     render();
     if (state.locationAccess?.status !== 'granted') locationAccessModal();
     return state.locationAccess;
@@ -759,12 +898,36 @@ async function initializeLocationAccess() {
   if (permission.status === 'granted') {
     const result = await requestCurrentPosition();
     rememberLocationResult(result);
+    if (!state.settings.gpsDisabledByUser) state.gps = true;
+    save(state);
     render();
     return result;
   }
+  state.gps = false;
   rememberLocationResult(permission);
+  save(state);
   render();
   return permission;
+}
+let locationResumeSyncBusy = false;
+async function syncLocationStatusOnResume() {
+  if (locationResumeSyncBusy || !state.settings?.locationPromptSeen) return;
+  locationResumeSyncBusy = true;
+  try {
+    const permission = await checkLocationPermission();
+    if (permission.status === 'granted') {
+      const result = await requestCurrentPosition();
+      rememberLocationResult(result);
+      if (!state.settings.gpsDisabledByUser) state.gps = true;
+    } else {
+      state.gps = false;
+      rememberLocationResult(permission);
+    }
+    save(state);
+    render();
+  } finally {
+    locationResumeSyncBusy = false;
+  }
 }
 const fuelMonitorTypes = ['benzin','motorin','lpg'];
 function monitoredFuelTypes() {
@@ -962,7 +1125,7 @@ app.addEventListener('click', async event => {
   const target = event.target.closest('[data-action],[data-view]'); if (!target) return;
   const { action, view } = target.dataset;
   if (view) { state.view=view; persist(); window.scrollTo({top:0,behavior:'smooth'}); return; }
-  if (action === 'toggle-gps') { if (state.gps && state.locationAccess?.status === 'granted') { state.gps=false; persist(); toast('GPS kullanımı uygulama içinde kapatıldı.'); } else await requestLocationAccess(); }
+  if (action === 'toggle-gps') { if (state.gps && state.locationAccess?.status === 'granted') { state.gps=false; state.settings.gpsDisabledByUser=true; persist(); toast('GPS kullanımı uygulama içinde kapatıldı.'); } else await requestLocationAccess(); }
   else if (action === 'request-location') await requestLocationAccess();
   else if (action === 'settings') settingsModal();
   else if (action === 'notif-tab') { state.notificationTab=target.dataset.tab; persist(); }
@@ -977,22 +1140,25 @@ app.addEventListener('click', async event => {
   else if (action === 'park') await recordPark();
   else if (action === 'accident') accidentModal();
   else if (action === 'open-history') historyModal('trips');
-  else if (action === 'open-parks') historyModal('parks');
+  else if (action === 'open-parks') openParkHistory();
   else if (action === 'navigate-park') openParkInMaps(target.dataset.id);
   else if (action === 'edit-trip') { const item=state.trips.find(row=>row.id===target.dataset.id); if (item) tripEditModal(item); }
   else if (action === 'vehicle-tab') { state.vehicleTab=target.dataset.tab; persist(); }
-  else if (action === 'add-vehicle') vehicleModal();
+  else if (action === 'catalog-type') { catalogTypeFilter=target.dataset.type || 'all'; render(); }
+  else if (action === 'add-vehicle') catalogModal();
   else if (action === 'edit-vehicle') vehicleModal(state.vehicles.find(v=>v.id===target.dataset.id));
   else if (action === 'refuel') openRefuelView(state.vehicles.find(v=>v.id===target.dataset.id) || state.vehicles.find(v=>v.id===state.selectedVehicleId) || state.vehicles[0]);
   else if (action === 'delete-vehicle') { state.vehicles=state.vehicles.filter(v=>v.id!==target.dataset.id); if(state.selectedVehicleId===target.dataset.id) state.selectedVehicleId=null; closeModal(); persist(); toast('Araç kaldırıldı.'); }
   else if (action === 'select-vehicle') { state.selectedVehicleId=target.dataset.id; persist(); toast('Aktif araç seçildi.'); }
   else if (action === 'receipt') receiptSourceModal();
   else if (action === 'barcode-scan') await runBarcodeScan();
+  else if (action === 'vehicle-qr-scan') await runVehicleRegistrationQr();
+  else if (action === 'refresh-vehicle-online') await refreshVehicleOnlineLookup(target.dataset.id, { notify:true });
   else if (action === 'document-ocr') await runDocumentOcr(target);
   else if (action === 'apply-document-draft') applyDocumentDraft(target.dataset.document || 'insurance');
   else if (action === 'add-driver') driverModal();
   else if (action === 'catalog') catalogModal();
-  else if (action === 'catalog-add') { const profile=getVehicleProfile(target.dataset.profileId || 'manual'); vehicleModal({...profile,profileId:profile.id,plate:'',km:state.settings.mileage||0,favoriteStation:'',fuelLevelPercent:0}); }
+  else if (action === 'catalog-add') { const profile=getVehicleProfile(target.dataset.profileId || 'manual'); vehicleModal({...profile,id:'',profileId:profile.id,plate:'',vin:'',km:state.settings.mileage||0,favoriteStation:'',fuelLevelPercent:0,onlineLookup:null}); }
   else if (action === 'remove-driver') { state.drivers=state.drivers.filter(driver=>driver.id!==target.dataset.id); persist(); toast('Sürücü kaldırıldı.'); }
   else if (action === 'start-trip') await startTrip();
   else if (action === 'end-trip') await endTrip();
@@ -1025,11 +1191,15 @@ modalLayer.addEventListener('click', async event => {
   if (event.target === modalLayer || target?.dataset.action === 'close') { closeModal(); return; }
   if (!target) return;
   if (target.dataset.action === 'barcode-scan') { await runBarcodeScan(); return; }
+  if (target.dataset.action === 'vehicle-qr-scan') { await runVehicleRegistrationQr(); return; }
+  if (target.dataset.action === 'apply-vehicle-qr') { applyVehicleRegistrationQr(false); return; }
+  if (target.dataset.action === 'vehicle-manual-from-qr') { applyVehicleRegistrationQr(true); return; }
+  if (target.dataset.action === 'catalog-type') { catalogTypeFilter=target.dataset.type || 'all'; catalogModal(); return; }
   if (target.dataset.action === 'receipt-source') { closeModal(); const source=target.dataset.source || 'camera'; toast(source === 'gallery' ? 'Fiş galeriden seçiliyor…' : 'Fiş kamerası açılıyor…'); try { const result=await readReceipt(source); if (result?.ok) receiptResultModal(result); else if (!result?.cancelled) toast(result?.message || 'Fiş görüntüsü alınamadı.', true); } catch (error) { toast(error?.message || 'Fiş OCR işlemi başarısız.', true); } return; }
   if (target.dataset.action === 'save-barcode-receipt') { saveBarcodeReceipt(); return; }
   if (target.dataset.action === 'copy-barcode') { await copyBarcodeValue(); return; }
   if (target.dataset.action === 'document-ocr') { await runDocumentOcr(target); return; }
-  if (target.dataset.action === 'add-vehicle') { closeModal(); vehicleModal(); return; }
+  if (target.dataset.action === 'add-vehicle') { closeModal(); catalogModal(); return; }
   if (target.dataset.action === 'refuel') { openRefuelView(state.vehicles.find(v=>v.id===target.dataset.id)); return; }
   if (target.dataset.action === 'edit-receipt') { const item=state.receipts.find(row=>row.id===target.dataset.id); if (item) receiptFormModal(item, { ocr:true, rawText:item.rawText || '', passes:item.ocrPasses || 1, message:'Kayıtlı fiş alanlarını düzenleyin.' }, item); return; }
   if (target.dataset.action === 'request-notification') {
@@ -1067,7 +1237,7 @@ modalLayer.addEventListener('click', async event => {
     if (state.selectedVehicleId === target.dataset.id) state.selectedVehicleId = null;
     closeModal(); persist(); toast('Araç kaldırıldı.');
   }
-  if (target.dataset.action === 'catalog-add') { const profile=getVehicleProfile(target.dataset.profileId || 'manual'); closeModal(); vehicleModal({...profile,profileId:profile.id,plate:'',km:state.settings.mileage||0,favoriteStation:'',fuelLevelPercent:0}); }
+  if (target.dataset.action === 'catalog-add') { event.stopPropagation(); const profile=getVehicleProfile(target.dataset.profileId || 'manual'); closeModal(); vehicleModal({...profile,id:'',profileId:profile.id,plate:'',vin:'',km:state.settings.mileage||0,favoriteStation:'',fuelLevelPercent:0,onlineLookup:null}); return; }
   if (target.dataset.action === 'remove-driver') { state.drivers=state.drivers.filter(driver=>driver.id!==target.dataset.id); closeModal(); persist(); toast('Sürücü kaldırıldı.'); }
   if (target.dataset.action === 'open-source') window.open(target.dataset.url, '_blank', 'noopener,noreferrer');
   if (target.dataset.action === 'obd-scan') await scanObd();
@@ -1075,11 +1245,11 @@ modalLayer.addEventListener('click', async event => {
   if (target.dataset.action === 'obd-connect') await useObdDevice(target);
 });
 document.addEventListener('change', event => { const input=event.target; if (input.matches('[data-location-city]')) { const district=input.form.querySelector('[data-location-district]'); district.innerHTML=locationItems(input.value).map(item=>`<option value="${esc(item.name)}">${esc(item.name)}</option>`).join(''); return; } if (input.matches('[data-vehicle-profile]')) { applyVehicleProfile(input.form, input.value); return; } if (input.matches('[data-refuel-vehicle]')) { const vehicle=state.vehicles.find(item=>item.id===input.value); if (vehicle) { state.selectedVehicleId=vehicle.id; save(state); refuelCalculatorModal(vehicle); } return; } if (!input.matches('[data-setting]')) return; const scope=input.dataset.scope; if(scope==='root' && input.dataset.setting==='gps' && input.checked && state.locationAccess?.status !== 'granted') { input.checked=false; requestLocationAccess(); return; } const value = input.type === 'checkbox' ? input.checked : input.value; if(scope==='root') state[input.dataset.setting]=value; else state.settings[input.dataset.setting]=value; save(state); if(['fontScale','theme'].includes(input.dataset.setting)) render(); toast('Ayar kaydedildi.'); });
-document.addEventListener('input', event => { const input=event.target; if (input.matches('[data-catalog-search]')) { const query=input.value.trim().toLocaleLowerCase('tr-TR'); modalLayer.querySelectorAll('[data-catalog-row]').forEach(row => { const haystack=row.dataset.searchText || row.textContent.toLocaleLowerCase('tr-TR'); row.hidden=Boolean(query && !haystack.includes(query)); }); return; } if (input.matches('[data-refuel-slider]')) updateRefuelCalculator(input.value); });
+document.addEventListener('input', event => { const input=event.target; if (input.matches('[data-catalog-search]')) { const query=input.value.trim().toLocaleLowerCase('tr-TR'); document.querySelectorAll('[data-catalog-row]').forEach(row => { const haystack=row.dataset.searchText || row.textContent.toLocaleLowerCase('tr-TR'); row.hidden=Boolean(query && !haystack.includes(query)); }); return; } if (input.matches('[data-refuel-slider]')) updateRefuelCalculator(input.value); });
 document.addEventListener('submit', async event => {
   const form=event.target.closest('form[data-form]'); if(!form) return; event.preventDefault(); const data=Object.fromEntries(new FormData(form));
   if(form.dataset.form==='online-vehicle-search'){ onlineVehicleQuery={make:String(data.make||'').trim(),model:String(data.model||'').trim(),year:String(data.year||'').trim(),vehicleType:data.vehicleType || 'otomobil'}; onlineVehicleStatus='loading'; onlineVehicleResults=[]; catalogModal(); try { const payload=await searchOnlineVehicleCatalog(onlineVehicleQuery); onlineVehicleResults=(payload.results || []).map(profile=>{ onlineVehicleProfiles.set(profile.id,profile); return profile; }); onlineVehicleStatus='success'; toast(onlineVehicleResults.length ? `${onlineVehicleResults.length} çevrimiçi model bulundu.` : 'Bu arama için çevrimiçi model bulunamadı.', !onlineVehicleResults.length); } catch(error) { onlineVehicleStatus='error'; toast(error?.message || 'Çevrimiçi katalog okunamadı.', true); } catalogModal(); return; }
-  if(form.dataset.form==='vehicle'){ const id=data.id||uid('vehicle'); const old=state.vehicles.find(v=>v.id===id); const vehicle={id,brand:data.brand.trim(),model:data.model.trim(),modelYear:data.modelYear?.trim() || '',engine:data.engine?.trim() || '',transmission:data.transmission?.trim() || '',generation:data.generation?.trim() || '',plate:data.plate.toLocaleUpperCase('tr-TR').trim(),fuel:data.fuel,tank:data.tank === '' ? null : Number(data.tank),km:Number(data.km)||0,favoriteStation:data.favoriteStation||'',profileId:data.profileId || 'manual',imageUrl:data.imageUrl || '',imageSourceUrl:data.imageSourceUrl || '',imageTitle:data.imageTitle || '',imageRepresentative:data.imageRepresentative === 'true',fuelLevelPercent:old?.fuelLevelPercent ?? 0}; const existing=state.vehicles.findIndex(v=>v.id===id); if(existing>=0)state.vehicles[existing]=vehicle;else state.vehicles.unshift(vehicle); state.selectedVehicleId=id; state.settings.mileage=vehicle.km; closeModal();persist();toast(existing>=0?'Araç güncellendi.':'Araç eklendi.'); }
+  if(form.dataset.form==='vehicle'){ const id=data.id||uid('vehicle'); const old=state.vehicles.find(v=>v.id===id); const vehicle={id,brand:data.brand.trim(),model:data.model.trim(),modelYear:data.modelYear?.trim() || '',engine:data.engine?.trim() || '',transmission:data.transmission?.trim() || '',generation:data.generation?.trim() || '',plate:data.plate.toLocaleUpperCase('tr-TR').trim(),vin:data.vin?.trim().toLocaleUpperCase('tr-TR') || '',fuel:data.fuel,tank:data.tank === '' ? null : Number(data.tank),km:Number(data.km)||0,favoriteStation:data.favoriteStation||'',profileId:data.profileId || 'manual',imageUrl:data.imageUrl || '',imageSourceUrl:data.imageSourceUrl || '',imageTitle:data.imageTitle || '',imageRepresentative:data.imageRepresentative === 'true',fuelLevelPercent:old?.fuelLevelPercent ?? 0,onlineLookup:old?.onlineLookup || null}; const existing=state.vehicles.findIndex(v=>v.id===id); if(existing>=0)state.vehicles[existing]=vehicle;else state.vehicles.unshift(vehicle); state.selectedVehicleId=id; state.settings.mileage=vehicle.km; vehicle.onlineLookup={...(vehicle.onlineLookup || {}),status:'loading',requestedAt:new Date().toISOString(),message:''}; closeModal();persist();toast(existing>=0?'Araç güncellendi; online model kontrolü başlatıldı.':'Araç eklendi; online model kontrolü başlatıldı.'); void refreshVehicleOnlineLookup(id); }
   else if(form.dataset.form==='refuel'){ const vehicle=state.vehicles.find(item=>item.id===data.vehicleId) || state.vehicles.find(item=>item.id===state.selectedVehicleId); if(vehicle){ vehicle.fuelLevelPercent=Math.min(100,Math.max(0,Number(data.fuelLevelPercent)||0)); state.selectedVehicleId=vehicle.id; closeModal(); persist(); toast(`Yakıt seviyesi ${vehicle.fuelLevelPercent}% olarak kaydedildi.`); } }
   else if(form.dataset.form==='trip-edit'){const item=state.trips.find(row=>row.id===data.id);if(item){item.title=data.title.trim();item.date=data.date.trim();item.type=data.type;item.km=Math.max(0,Number(data.km)||0);item.duration=data.duration.trim();item.note=data.note.trim();item.updatedAt=displayNow();closeModal();persist();toast('Sürüş kaydı güncellendi.');}}
   else if(form.dataset.form==='park-edit'){const item=state.parks.find(row=>row.id===data.id);if(item){item.title=data.title.trim();item.date=data.date.trim() || item.date;item.note=data.note.trim();if(parkGpsDraft){item.latitude=parkGpsDraft.latitude;item.longitude=parkGpsDraft.longitude;item.accuracy=parkGpsDraft.accuracy ?? null;item.capturedAt=parkGpsDraft.capturedAt || new Date().toISOString();item.source='manual-edit';}parkGpsDraft=null;closeModal();persist();toast(item.latitude != null ? 'Park kaydı ve GPS konumu güncellendi.' : 'Park kaydı güncellendi.');}}
@@ -1118,8 +1288,11 @@ document.addEventListener('submit', event => {
 
 window.addEventListener('offline', () => { render(); toast('İnternet bağlantısı yok. Acil kayıtlar cihazda saklanabilir.', true); });
 window.addEventListener('online', () => { render(); toast('İnternet bağlantısı geri geldi.'); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncLocationStatusOnResume().catch(() => {}); });
+globalThis.Capacitor?.Plugins?.App?.addListener?.('appStateChange', change => { if (change?.isActive) syncLocationStatusOnResume().catch(() => {}); });
 refreshPrices({ silent:true }).catch(() => render());
 render();
+setTimeout(refreshMissingVehicleLookups, 350);
 refreshFutureFuelAlerts(true);
 if(state.activeTrip) { tripClock(); if (state.activeTrip.startPosition) startTripGpsWatch(); }
 initializeLocationAccess().catch(error => { rememberLocationResult({ ok:false, status:'unavailable', permission:'unknown', message:error?.message || 'Konum erişimi başlatılamadı.' }); render(); locationAccessModal(); });

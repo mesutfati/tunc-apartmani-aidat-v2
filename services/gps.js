@@ -40,7 +40,9 @@ export async function requestCurrentPosition() {
       const result = await native.getCurrentPosition({ enableHighAccuracy:true, timeout:12000, maximumAge:0 });
       return { ok:true, permission:'granted', status:'granted', serviceEnabled:true, latitude:result.coords.latitude, longitude:result.coords.longitude, accuracy:result.coords.accuracy ?? null, capturedAt:new Date(result.timestamp || Date.now()).toISOString() };
     } catch (error) {
-      return { ok:false, permission:permissionStatus(permission?.location), status:'service-off', serviceEnabled:false, message:'İzin verilmiş olsa da cihaz konum servisi kapalı veya konum alınamadı. Android Ayarları > Konum bölümünü açın.', error:error?.message || String(error) };
+      const errorText = error?.message || String(error);
+      const serviceOff = /not enabled|disabled|location service|provider|location setting|konum servisi|konum ayarı/i.test(errorText);
+      return { ok:false, permission:permissionStatus(permission?.location), status:serviceOff ? 'service-off' : 'granted', serviceEnabled:serviceOff ? false : null, message:serviceOff ? 'İzin verilmiş olsa da cihaz konum servisi kapalı olabilir. Android Ayarları > Konum bölümünü açın.' : 'Konum izni açık; geçerli GPS konumu henüz alınamadı. Açık alanda tekrar denenebilir.', error:errorText };
     }
   }
   if (!navigator.geolocation) return { ok:false, permission:'unsupported', status:'unavailable', serviceEnabled:false, message:'Bu tarayıcı konum servisini desteklemiyor.' };
