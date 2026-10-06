@@ -44,7 +44,7 @@ export const seedState = {
   healthReport:null,
   obdDevice:null,
   hgs:[],
-  settings:{ notifications:true, autoBackup:false, motionTracking:false, mileage:0, locationPromptSeen:false },
+  settings:{ notifications:true, autoBackup:false, motionTracking:false, mileage:0, locationPromptSeen:false, fontScale:'normal' },
   notifications:[]
 };
 

@@ -38,29 +38,29 @@ function parseDocumentText(rawText = '', type = 'insurance') {
   return result;
 }
 
-function browserCapture() {
+function browserCapture(source = 'camera') {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+    input.type = 'file'; input.accept = 'image/*'; if (source === 'camera') input.capture = 'environment';
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) { reject(new Error('Belge fotoğrafı seçilmedi.')); return; }
-      resolve({ ok:true, native:false, ocr:false, imageName:file.name, parsed:{}, rawText:'', message:'Belge fotoğrafı alındı. Gerçek cihaz içi OCR APK içinde çalışır.' });
+      resolve({ ok:true, native:false, ocr:false, imageName:file.name, scanMode:source === 'gallery' ? 'gallery' : 'camera', parsed:{}, rawText:'', message:source === 'gallery' ? 'Galeriden belge seçildi. Gerçek cihaz içi OCR APK içinde çalışır.' : 'Belge fotoğrafı alındı. Gerçek cihaz içi OCR APK içinde çalışır.' });
     };
     input.click();
   });
 }
 
-export async function readDocument(type = 'insurance') {
+export async function readDocument(type = 'insurance', source = 'camera') {
   const camera = nativePlugin('Camera');
   const ocr = nativePlugin('Vision');
-  if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture();
+  if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture(source);
   try {
     let imageUri = '';
     let imageUris = [];
     let scanMode = 'camera';
     let pageCount = 1;
-    if (ocr?.scanDocument) {
+    if (source !== 'gallery' && ocr?.scanDocument) {
       try {
         const scanned = await ocr.scanDocument({ pageLimit:type === 'accident' ? 2 : 1 });
         imageUri = scanned?.imageUri || '';
@@ -73,10 +73,10 @@ export async function readDocument(type = 'insurance') {
       }
     }
     if (!imageUri) {
-      const photo = await camera.getPhoto({ quality:95, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Belgenin tamamını düz kadraja alın', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
+      const photo = await camera.getPhoto({ quality:95, allowEditing:false, resultType:'uri', source:source === 'gallery' ? 'PHOTOS' : 'CAMERA', promptLabelHeader:source === 'gallery' ? 'Galeriden belge seçin' : 'Belgenin tamamını düz kadraja alın', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
       imageUri = photo?.path || photo?.webPath;
       imageUris = imageUri ? [imageUri] : [];
-      scanMode = 'camera';
+      scanMode = source === 'gallery' ? 'gallery' : 'camera';
     }
     if (!imageUri) throw new Error('Kamera fotoğraf yolu döndürmedi.');
     if (!ocr?.detectText) return { ok:true, native:true, ocr:false, imageUri, scanMode, pageCount, parsed:{}, rawText:'', message:'Belge görüntüsü alındı. OCR servisi kullanılamadı; alanları formda elle tamamlayın.' };

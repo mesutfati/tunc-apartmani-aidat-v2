@@ -129,11 +129,13 @@ function mergeAlerts(results) {
     const uniquePublishers = new Set(group.sources.map(source => source.sourceId));
     const hasOfficial = group.sources.some(source => source.sourceTier === 'Resmi kurum');
     const sourceCount = uniquePublishers.size;
-    const future = effective >= new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const effectiveDay = new Date(effective.getFullYear(), effective.getMonth(), effective.getDate());
+    const status = effectiveDay > today ? 'upcoming' : effectiveDay.getTime() === today.getTime() ? 'active' : 'past';
     const confidence = hasOfficial && sourceCount >= 2 ? 'Yüksek' : sourceCount >= 2 ? 'Orta' : 'Düşük';
     const confidenceNote = hasOfficial ? 'Resmi kayıtla ve medya kaynağıyla eşleşiyor.' : sourceCount >= 2 ? `${sourceCount} yayın aynı ürün, tutar ve tarihi aktarıyor; ortak sektör kaynağı ayrıca resmî olarak yayımlanmış değil.` : 'Tek yayın bulundu; resmî teyit yok.';
-    return { ...group, sources:group.sources.map(source => ({ sourceName:source.sourceName, sourceTier:source.sourceTier, publishedAt:source.publishedAt, url:source.url, evidence:source.evidence })), sourceCount, independentSourceCount:sourceCount, confidence, confidenceNote, status:future?'upcoming':'past' };
-  }).sort((a,b) => `${a.status==='upcoming'?0:1}${a.effectiveDate}`.localeCompare(`${b.status==='upcoming'?0:1}${b.effectiveDate}`));
+    return { ...group, sources:group.sources.map(source => ({ sourceName:source.sourceName, sourceTier:source.sourceTier, publishedAt:source.publishedAt, url:source.url, evidence:source.evidence })), sourceCount, independentSourceCount:sourceCount, confidence, confidenceNote, status };
+  }).sort((a,b) => `${a.status==='upcoming'?0:a.status==='active'?1:2}${a.effectiveDate}`.localeCompare(`${b.status==='upcoming'?0:b.status==='active'?1:2}${b.effectiveDate}`));
 }
 
 export async function collectFuelAlerts() {

@@ -216,35 +216,35 @@ function parseReceiptText(rawText = '') {
   return parsed;
 }
 
-function browserCapture() {
+function browserCapture(source = 'camera') {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
-    input.type = 'file'; input.accept = 'image/*'; input.capture = 'environment';
+    input.type = 'file'; input.accept = 'image/*'; if (source === 'camera') input.capture = 'environment';
     input.onchange = () => {
       const file = input.files?.[0];
       if (!file) { reject(new Error('Fiş fotoğrafı seçilmedi.')); return; }
       const url = URL.createObjectURL(file);
-      resolve({ ok:true, native:false, imageUri:url, imageName:file.name, ocr:false, parsed:parseReceiptText(''), rawText:'', message:'Fotoğraf alındı. OCR ve alan çıkarımı gerçek Android APK içinde çalışır.' });
+      resolve({ ok:true, native:false, imageUri:url, imageName:file.name, scanMode:source === 'gallery' ? 'gallery' : 'camera', ocr:false, parsed:parseReceiptText(''), rawText:'', message:source === 'gallery' ? 'Galeriden fiş seçildi. OCR ve alan çıkarımı gerçek Android APK içinde çalışır.' : 'Fotoğraf alındı. OCR ve alan çıkarımı gerçek Android APK içinde çalışır.' });
     };
     input.click();
   });
 }
 
-export async function readReceipt() {
+export async function readReceipt(source = 'camera') {
   const camera = nativePlugin('Camera');
   const ocr = nativePlugin('Vision');
-  if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture();
+  if (!camera || !globalThis.Capacitor?.isNativePlatform?.()) return browserCapture(source);
   try {
-    const photo = await camera.getPhoto({ quality:95, allowEditing:false, resultType:'uri', source:'CAMERA', promptLabelHeader:'Fişin tamamını kadraja alın', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
+    const photo = await camera.getPhoto({ quality:95, allowEditing:false, resultType:'uri', source:source === 'gallery' ? 'PHOTOS' : 'CAMERA', promptLabelHeader:source === 'gallery' ? 'Galeriden fiş seçin' : 'Fişin tamamını kadraja alın', promptLabelPhoto:'Galeriden seç', promptLabelPicture:'Fotoğraf çek', correctOrientation:true, saveToGallery:false });
     const imageUri = photo?.path || photo?.webPath;
     if (!imageUri) throw new Error('Kamera fotoğraf yolu döndürmedi.');
-    if (!ocr?.detectText) return { ok:true, native:true, ocr:false, imageUri, parsed:parseReceiptText(''), rawText:'', message:'Fiş fotoğrafı alındı. OCR servisi kullanılamadı; bilgileri elle kontrol edin.' };
+    if (!ocr?.detectText) return { ok:true, native:true, ocr:false, imageUri, scanMode:source === 'gallery' ? 'gallery' : 'camera', parsed:parseReceiptText(''), rawText:'', message:'Fiş görüntüsü alındı. OCR servisi kullanılamadı; bilgileri elle kontrol edin.' };
     try {
       const result = await ocr.detectText({ filename:imageUri, orientation:'UP' });
       const rawText = result?.text || (result?.textDetections || []).map(item => item.text).join('\n');
-      return { ok:true, native:true, ocr:true, imageUri, parsed:parseReceiptText(rawText), rawText, passes:result?.passes || 1, message:'Fiş metni iki OCR geçişiyle cihazda okundu; alanları kaydetmeden önce kontrol edin.' };
+      return { ok:true, native:true, ocr:true, imageUri, scanMode:source === 'gallery' ? 'gallery' : 'camera', parsed:parseReceiptText(rawText), rawText, passes:result?.passes || 1, message:'Fiş metni iki OCR geçişiyle cihazda okundu; alanları kaydetmeden önce kontrol edin.' };
     } catch (ocrError) {
-      return { ok:true, native:true, ocr:false, imageUri, parsed:parseReceiptText(''), rawText:'', message:`Fiş fotoğrafı alındı; OCR çalışmadı. Bilgileri elle kontrol edin. (${ocrError?.message || 'OCR hatası'})` };
+      return { ok:true, native:true, ocr:false, imageUri, scanMode:source === 'gallery' ? 'gallery' : 'camera', parsed:parseReceiptText(''), rawText:'', message:`Fiş görüntüsü alındı; OCR çalışmadı. Bilgileri elle kontrol edin. (${ocrError?.message || 'OCR hatası'})` };
     }
   } catch (error) {
     return { ok:false, native:true, ocr:false, message:error?.message || 'Kamera/OCR işlemi tamamlanamadı.' };
