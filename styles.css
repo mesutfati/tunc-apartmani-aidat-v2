@@ -621,3 +621,47 @@ html[data-theme="contrast"] .primary-button { background:var(--teal); color:#000
 html[data-theme="sunset"] .hero-card { background:linear-gradient(126deg,#8f4c50 0%,#713c58 42%,#2f1e39 100%); }
 html[data-theme="violet"] .hero-card { background:linear-gradient(126deg,#5b4ba1 0%,#40356f 42%,#191b42 100%); }
 html[data-theme="contrast"] .hero-card { background:#111; border:2px solid var(--teal); }
+
+/* Model fotoğrafı ve çevrimiçi katalog yüzeyi. Teknik veri ile görsel kaynakları ayrı gösterilir. */
+.vehicle-model-visual { margin:10px 0 12px; overflow:hidden; border:1px solid rgba(107,239,220,.24); border-radius:18px; background:linear-gradient(135deg,rgba(15,61,76,.9),rgba(33,32,76,.94)); box-shadow:0 10px 22px rgba(1,8,26,.18),inset 0 1px 0 rgba(255,255,255,.1); }
+.vehicle-model-visual img { display:block; width:100%; height:132px; object-fit:cover; background:#10233b; }
+.vehicle-model-visual figcaption { padding:7px 10px; color:#a9cbd5; font-size:9px; line-height:1.35; }
+.vehicle-model-visual figcaption a { color:#8ff8e7; font-weight:800; text-decoration:none; }
+.vehicle-model-visual.compact { margin:0; width:78px; flex:none; border-radius:15px; }
+.vehicle-model-visual.compact img { height:64px; }
+.vehicle-model-visual.compact figcaption { display:none; }
+.vehicle-model-placeholder { display:grid; place-items:center; gap:4px; min-height:132px; padding:14px; color:#dffff9; background:radial-gradient(circle at 28% 20%,rgba(85,232,213,.28),transparent 38%),linear-gradient(145deg,#153f52,#2c285d); text-align:center; }
+.vehicle-model-placeholder strong { display:grid; place-items:center; width:58px; height:58px; border:1px solid rgba(190,255,242,.55); border-radius:20px; color:#bafff3; background:rgba(8,24,49,.35); font-size:21px; letter-spacing:.08em; }
+.vehicle-model-placeholder span { max-width:90%; color:#c7e7ef; font-size:10px; font-weight:800; line-height:1.25; }
+.vehicle-model-visual.compact .vehicle-model-placeholder { min-height:64px; padding:5px; }
+.vehicle-model-visual.compact .vehicle-model-placeholder strong { width:34px; height:34px; border-radius:11px; font-size:12px; }
+.vehicle-model-visual.compact .vehicle-model-placeholder span { display:none; }
+.vehicle-profile-summary > b, .vehicle-profile-summary > span, .vehicle-profile-summary > small, .vehicle-profile-summary > a { display:block; }
+.vehicle-online-note { color:#ffd986 !important; }
+.vehicle-art { display:grid; place-items:center; overflow:hidden; width:76px; height:76px; flex:none; border:1px solid rgba(91,232,214,.25); border-radius:22px; color:#9ffbed; background:linear-gradient(145deg,rgba(23,86,94,.9),rgba(37,39,89,.96)); box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 10px 18px rgba(2,9,28,.18); }
+.vehicle-art img { width:100%; height:100%; object-fit:cover; }
+.online-vehicle-panel { margin:2px 0 14px; padding:14px; border:1px solid rgba(104,231,214,.24); border-radius:22px; background:linear-gradient(145deg,rgba(12,47,66,.88),rgba(31,31,71,.9)); box-shadow:0 13px 28px rgba(2,8,28,.18),inset 0 1px 0 rgba(255,255,255,.08); }
+.online-vehicle-panel .section-head { margin:0 0 10px; }
+.online-vehicle-panel .section-head h3 { margin:0; font-size:14px; }
+.online-vehicle-panel .section-head h4 { margin:0; color:#eafffb; font-size:12px; }
+.online-vehicle-panel .form-grid { gap:9px; }
+.online-vehicle-panel .form-group { margin-bottom:9px; }
+.online-vehicle-panel input, .online-vehicle-panel select { min-height:40px; }
+.catalog-disclaimer { display:block; margin-top:9px; color:#9fc5d4; font-size:9px; line-height:1.45; }
+.online-results { margin-top:13px; padding-top:10px; border-top:1px solid rgba(255,255,255,.08); }
+.online-catalog-row { border-color:rgba(255,215,122,.22) !important; background:linear-gradient(135deg,rgba(72,59,29,.3),rgba(22,48,66,.58)) !important; }
+.online-catalog-row .row-icon { color:#ffd67b; background:rgba(255,211,109,.12); }
+.online-catalog-row .row-main small { display:block; margin-top:3px; color:#ffd986; font-size:9px; line-height:1.3; }
+@media (max-width:390px) {
+  .vehicle-model-visual img { height:112px; }
+  .online-vehicle-panel { padding:11px; }
+  .vehicle-art { width:64px; height:64px; border-radius:18px; }
+}
+
+.vehicle-knowledge-card { margin-top:11px; padding:11px; border:1px solid rgba(255,214,124,.2); border-radius:16px; background:linear-gradient(145deg,rgba(62,49,35,.5),rgba(24,37,67,.58)); }
+.vehicle-knowledge-card > b, .vehicle-knowledge-card > small { display:block; }
+.vehicle-knowledge-card > b { color:#ffe4a3; font-size:11px; }
+.vehicle-knowledge-card > small { margin-top:4px; color:#b9ced5; font-size:9px; line-height:1.4; }
+.vehicle-knowledge-links { display:grid; gap:5px; margin-top:8px; }
+.vehicle-knowledge-links a { display:flex; align-items:center; justify-content:space-between; gap:5px; min-height:29px; padding:0 8px; border:1px solid rgba(255,214,124,.15); border-radius:9px; color:#d9fff7; background:rgba(8,25,48,.28); font-size:9px; font-weight:800; text-decoration:none; }
+.vehicle-knowledge-links a:hover { border-color:rgba(255,214,124,.45); color:#ffe4a3; }
