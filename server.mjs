@@ -5,6 +5,7 @@ import { getFuelPrices } from './services/fuel-prices.js';
 import { getEarlyWarningLive } from './services/early-warning.js';
 import { collectFuelAlerts } from './services/fuel-alert-feed.js';
 import { searchOnlineVehicleCatalog } from './services/vehicle-online.js';
+import { fetchVehicleProfileTips } from './services/fulldepo-catalog.js';
 
 const root = process.cwd();
 const port = Number(process.env.PORT || 3000);
@@ -48,6 +49,14 @@ http.createServer((req, res) => {
     }, { direct:true })
       .then(payload => { res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify(payload)); })
       .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify({ ok:false, results:[], error:error.message })); });
+    return;
+  }
+  if (requestUrl.pathname === '/api/vehicle-tips') {
+    let profile = {};
+    try { profile = JSON.parse(requestUrl.searchParams.get('profile') || '{}'); } catch {}
+    fetchVehicleProfileTips({ ...profile, sourceKind:'fulldepo' })
+      .then(result => { res.writeHead(200, { 'Content-Type':'application/json; charset=utf-8', 'Cache-Control':'no-store', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify({ ok:true, profile:result })); })
+      .catch(error => { res.writeHead(502, { 'Content-Type':'application/json; charset=utf-8', 'Access-Control-Allow-Origin':'*' }); res.end(JSON.stringify({ ok:false, error:error.message })); });
     return;
   }
   const raw = decodeURIComponent((req.url || '/').split('?')[0]);

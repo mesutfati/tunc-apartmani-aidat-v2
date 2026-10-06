@@ -1,4 +1,5 @@
 const VPIC_BASE = 'https://vpic.nhtsa.dot.gov/api/vehicles';
+import { searchFulldepoCatalog, isFulldepoConfigured } from './fulldepo-catalog.js';
 
 const clean = value => String(value || '').trim();
 const normal = value => clean(value).toLocaleLowerCase('tr-TR');
@@ -37,6 +38,8 @@ function mapResult(item, query) {
       'Motor/yakıt/depo/tüketim: bu çevrimiçi model sonucunda doğrulanmadı; elle tamamlanmalı'
     ],
     online: true,
+    sourceKind: 'vpic',
+    tipScope: 'verification',
     makeId: item.Make_ID || null,
     modelId: item.Model_ID || null
   };
@@ -114,10 +117,22 @@ export async function searchOnlineVehicleCatalog(query = {}, options = {}) {
     }
   }
 
+  if (isFulldepoConfigured()) {
+    try {
+      const fulldepo = await searchFulldepoCatalog(query);
+      if (fulldepo.ok && fulldepo.results?.length) return fulldepo;
+      if (fulldepo.ok && query.vehicleType === 'motosiklet') return fulldepo;
+    } catch (error) {
+      if (options.fulldepoOnly) throw error;
+      // Fulldepo erişilemezse aşağıdaki resmi vPIC model keşfi yedeği çalışır.
+    }
+  }
+
   const results = await searchVpic(query);
   return {
     ok: true,
-    source: 'NHTSA vPIC',
+    source: 'NHTSA vPIC model keşfi (Fulldepo yedeği)',
+    sourceKind: 'vpic',
     checkedAt: new Date().toISOString(),
     results,
     note: 'Model/yıl keşfi yapıldı. Türkiye trim, motor, yakıt, depo ve tüketim doğrulaması ayrıca gerekir.'
@@ -126,5 +141,9 @@ export async function searchOnlineVehicleCatalog(query = {}, options = {}) {
 
 export function onlineVehicleSummary(profile) {
   if (!profile?.online) return '';
+  if (profile.sourceKind === 'fulldepo') {
+    const details = [profile.fuel && profile.fuel !== 'Belirtilmedi' ? profile.fuel : '', profile.engine || '', profile.tank != null ? `${profile.tank} L depo` : ''].filter(Boolean).join(' · ');
+    return `${profile.modelYear ? `${profile.modelYear} · ` : ''}Fulldepo kaynak kaydı${details ? ` · ${details}` : ''}`;
+  }
   return `${profile.modelYear ? `${profile.modelYear} · ` : ''}NHTSA vPIC model keşfi · teknik alanlar elle doğrulanmalı`;
 }

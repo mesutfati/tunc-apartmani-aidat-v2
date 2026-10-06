@@ -2,3 +2,5 @@
 // sync-web.mjs writes www/runtime-config.js from NSOFT_FUEL_API_KEY when building an APK.
 export const NSOFT_FUEL_API_KEY = '';
 export const SURUS_CEPTE_ALERT_API_URL = '';
+export const FULLDEPO_FIREBASE_API_KEY = '';
+export const FULLDEPO_PROJECT_ID = 'fullldepo-ogmedya';
